@@ -624,6 +624,20 @@ def chat(request: ChatRequest):
         saved_files   = []   # files written via XML fallback
         final_response = None
 
+        # ---------------------------------------------------------------------------
+        # Helper: unified attribute access for ollama Pydantic objects or plain dicts
+        # ---------------------------------------------------------------------------
+        def _get(obj, key, default=None):
+            """Get a field from an ollama response object (Pydantic) or a plain dict."""
+            if obj is None:
+                return default
+            if hasattr(obj, key):
+                val = getattr(obj, key)
+                return val if val is not None else default
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return default
+
         # Agentic loop
         for iteration in range(MAX_TOOL_ITERATIONS):
             kwargs = {"model": request.model, "messages": messages}
@@ -631,22 +645,45 @@ def chat(request: ChatRequest):
                 kwargs["tools"] = active_tools
 
             response = client.chat(**kwargs)
-            reply_msg = response["message"]
-            tool_calls = reply_msg.get("tool_calls") or []
+
+            # Support both Pydantic ChatResponse (new ollama lib) and dict (old lib)
+            reply_msg  = _get(response, "message")
+            tool_calls = _get(reply_msg, "tool_calls") or []
+
+            # Build a plain-dict version of the assistant message for the history list
+            reply_content_now = _get(reply_msg, "content") or ""
 
             if not tool_calls:
-                # Final text answer
+                # ── Final text answer ────────────────────────────────────────────
                 final_response = response
-                messages.append({"role": "assistant", "content": reply_msg.get("content", "")})
+                messages.append({"role": "assistant", "content": reply_content_now})
                 break
 
-            # Append the assistant's tool-call message
-            messages.append(reply_msg)
+            # Append the assistant's tool-call message as a plain dict so the
+            # history list stays JSON-serialisable regardless of ollama version.
+            # Include tool_calls in the serialised form so the model gets context.
+            tc_dicts = []
+            for tc in tool_calls:
+                fn_obj   = _get(tc, "function") or {}
+                fn_name_ = _get(fn_obj, "name") or (fn_obj.get("name") if isinstance(fn_obj, dict) else "")
+                fn_args_ = _get(fn_obj, "arguments") or (fn_obj.get("arguments") if isinstance(fn_obj, dict) else {})
+                tc_dicts.append({"function": {"name": fn_name_, "arguments": fn_args_}})
+
+            messages.append({
+                "role":       "assistant",
+                "content":    reply_content_now,
+                "tool_calls": tc_dicts,
+            })
 
             # Execute each tool call
             for tc in tool_calls:
-                fn_name = tc["function"]["name"]
-                fn_args = tc["function"].get("arguments", {})
+                fn_obj  = _get(tc, "function") or {}
+                fn_name = _get(fn_obj, "name") or (fn_obj.get("name") if isinstance(fn_obj, dict) else "")
+                fn_args = _get(fn_obj, "arguments") or (fn_obj.get("arguments") if isinstance(fn_obj, dict) else {})
+
+                if not fn_name:
+                    continue
+
                 if isinstance(fn_args, str):
                     try:
                         fn_args = json.loads(fn_args)
@@ -681,7 +718,7 @@ def chat(request: ChatRequest):
             messages.append({"role": "assistant", "content": "I reached the maximum number of tool iterations."})
 
         # XML file tag fallback (for models that don't support tool calling)
-        reply_content = final_response["message"].get("content", "") if final_response else ""
+        reply_content = _get(_get(final_response, "message"), "content") or "" if final_response else ""
         file_pattern = r'<file\s+path="([^"]+)">\s*(.*?)\s*</file>'
         for match in re.finditer(file_pattern, reply_content, re.DOTALL):
             filepath, content = match.group(1), match.group(2)
@@ -692,10 +729,11 @@ def chat(request: ChatRequest):
                     f.write(content)
                 saved_files.append(filepath)
 
-        # Persist conversation (strip out tool role messages for clean history)
-        clean_messages = [m for m in messages if m.get("role") not in ("tool",)]
+        # Persist conversation — keep tool messages so the agent has full context
+        # on the next turn. Only exclude raw Pydantic objects (they're not JSON-safe).
+        safe_messages = [m for m in messages if isinstance(m, dict)]
         with open(history_file, "w") as f:
-            json.dump(clean_messages, f, indent=2)
+            json.dump(safe_messages, f, indent=2)
 
         # Metrics — handle both Pydantic model objects (new ollama lib) and plain dicts
         eval_count        = safe_metric(final_response, "eval_count")
