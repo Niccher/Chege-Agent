@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import ollama
@@ -6,7 +7,6 @@ import os
 import subprocess
 import re
 import json
-from typing import List, Dict
 
 app = FastAPI()
 
@@ -21,6 +21,22 @@ app.add_middleware(
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 WORKSPACE_BASE = os.path.join(BASE_DIR, "workdir")
 LOGS_BASE = os.path.join(BASE_DIR, "logs")
+GLOBAL_CONFIG_FILE = os.path.join(LOGS_BASE, "global_config.json")
+FRONTEND_INDEX = os.path.join(BASE_DIR, "webui", "index.html")
+
+os.makedirs(LOGS_BASE, exist_ok=True)
+os.makedirs(WORKSPACE_BASE, exist_ok=True)
+
+# Default global config
+def get_config():
+    if os.path.exists(GLOBAL_CONFIG_FILE):
+        with open(GLOBAL_CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {"ollama_url": "http://host.docker.internal:11434"}
+
+def get_ollama_client():
+    config = get_config()
+    return ollama.Client(host=config.get("ollama_url", "http://host.docker.internal:11434"))
 
 def get_project_dirs(project_name: str):
     if not project_name or ".." in project_name or "/" in project_name:
@@ -45,15 +61,35 @@ class ChatRequest(BaseModel):
     project_name: str
     system_prompt: str = ""
 
+@app.get("/")
+async def serve_frontend():
+    if os.path.exists(FRONTEND_INDEX):
+        return FileResponse(FRONTEND_INDEX)
+    raise HTTPException(status_code=404, detail="Frontend index.html not found.")
+
+@app.get("/config")
+async def read_config():
+    return get_config()
+
+@app.post("/config")
+async def update_config(request: Request):
+    try:
+        data = await request.json()
+        with open(GLOBAL_CONFIG_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/models")
 async def get_models():
     try:
-        response = ollama.list()
-        # The ollama python library returns an object with a 'models' attribute containing Model objects
+        client = get_ollama_client()
+        response = client.list()
+        
         if hasattr(response, 'models'):
             model_names = [m.model for m in response.models]
         else:
-            # Fallback for older library versions
             model_names = [m.get('name') or m.get('model') for m in response.get('models', [])]
         return {"models": model_names}
     except Exception as e:
@@ -137,6 +173,7 @@ async def get_history(project_name: str):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     try:
+        client = get_ollama_client()
         work_dir, logs_dir = get_project_dirs(request.project_name)
         history_file = os.path.join(logs_dir, "chat_history.json")
         
@@ -156,14 +193,12 @@ async def chat(request: ChatRequest):
             f"{request.system_prompt}"
         )
         
-        # Inject system prompt if it's the first interaction, otherwise just append user msg
         if not messages:
             messages.append({"role": "system", "content": system_instruction})
             
         messages.append({"role": "user", "content": request.message})
 
-        response = ollama.chat(model=request.model, messages=messages)
-
+        response = client.chat(model=request.model, messages=messages)
         reply_content = response['message']['content']
         messages.append({"role": "assistant", "content": reply_content})
         

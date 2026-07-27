@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  coding-agent:
+    build: .
+    container_name: coding-agent
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./workdir:/app/workdir
+      - ./logs:/app/logs
+    restart: unless-stopped
+    # Depending on the host OS, host.docker.internal allows the container to reach the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
