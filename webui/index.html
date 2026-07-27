@@ -314,6 +314,53 @@
 
     function renderMarkdown(text) { return marked.parse(text); }
 
+    function buildMetricsBar(metrics) {
+        if (!metrics) return '';
+        const m = metrics;
+        const tps = (m.tokens_per_sec && m.tokens_per_sec > 0) ? `${m.tokens_per_sec} tok/s` : '—';
+        const genTokens = m.tokens_generated || 0;
+        const promptTokens = m.prompt_tokens || 0;
+        const totalTime = m.total_time_s || 0;
+        const evalTime = m.eval_time_s || 0;
+        const loadTime = m.load_time_s || 0;
+        const toolIter = m.tool_iterations || 0;
+        const toolBadge = toolIter > 0
+            ? `<span class="metric-badge">🔧 <span class="metric-value">${toolIter}</span> tool call${toolIter > 1 ? 's' : ''}</span>`
+            : '';
+        return `
+        <div class="metrics-bar">
+            <span class="metric-badge">⚡ <span class="metric-value">${tps}</span></span>
+            <span class="metric-badge">🪙 <span class="metric-value">${genTokens}</span> generated</span>
+            <span class="metric-badge">📥 <span class="metric-value">${promptTokens}</span> prompt</span>
+            <span class="metric-badge">⏱ <span class="metric-value">${totalTime}s</span> total</span>
+            <span class="metric-badge">🧠 <span class="metric-value">${evalTime}s</span> eval</span>
+            ${loadTime > 0.1 ? `<span class="metric-badge">📦 <span class="metric-value">${loadTime}s</span> load</span>` : ''}
+            ${toolBadge}
+        </div>`;
+    }
+
+    function buildToolCallCards(toolCallLog) {
+        if (!toolCallLog || toolCallLog.length === 0) return '';
+        const cards = toolCallLog.map((tc, i) => {
+            const argsStr = JSON.stringify(tc.args).slice(0, 120);
+            const id = `tc-${Date.now()}-${i}`;
+            return `
+            <div class="tool-call-card">
+                <div class="tool-call-header" onclick="document.getElementById('${id}').style.display = document.getElementById('${id}').style.display === 'block' ? 'none' : 'block'">
+                    <span>🔧</span>
+                    <span class="tool-call-name">${tc.tool}</span>
+                    <span class="tool-call-args">${argsStr}</span>
+                    <span style="margin-left:auto;font-size:0.7rem;color:#64748b;">▼ result</span>
+                </div>
+                <div class="tool-call-body" id="${id}">
+                    <pre>${tc.result}</pre>
+                </div>
+            </div>`;
+        }).join('');
+        return `<div class="mb-2">${cards}</div>`;
+    }
+
+
     function getEnabledTools() {
         const checked = [];
         $('#toolsList input[type=checkbox]:checked').each(function() {
