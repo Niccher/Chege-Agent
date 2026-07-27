@@ -472,6 +472,20 @@ async def get_models():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/projects")
+async def list_projects():
+    """List all project folders inside the workspace directory."""
+    try:
+        if not os.path.exists(WORKSPACE_BASE):
+            return {"projects": []}
+        projects = [
+            d for d in os.listdir(WORKSPACE_BASE)
+            if os.path.isdir(os.path.join(WORKSPACE_BASE, d)) and d != ".git"
+        ]
+        return {"projects": sorted(projects)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/files")
 async def list_files_api(project_name: str):
     try:

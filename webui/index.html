@@ -9,18 +9,21 @@
     <!-- highlight.js for beautiful code syntax highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <style>
+    <style>
         body { height: 100vh; overflow: hidden; background-color: #f8f9fa; }
-        .sidebar { height: 100vh; background-color: #343a40; color: white; padding: 20px; overflow-y: auto; }
+        .sidebar { height: 100vh; background-color: #1e1e2e; color: #cdd6f4; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; border-right: 1px solid #313244; }
+        .sidebar-content { flex-grow: 1; overflow-y: auto; }
+        .sidebar-footer { padding-top: 15px; border-top: 1px solid #313244; }
         .main-content { height: 100vh; display: flex; flex-direction: column; }
-        .chat-container { flex-grow: 1; overflow-y: auto; padding: 20px; background: white; }
-        .chat-input-container { padding: 20px; background: #e9ecef; border-top: 1px solid #dee2e6; }
-        .message { margin-bottom: 15px; padding: 10px; border-radius: 8px; max-width: 80%; }
-        .message.user { background-color: #0d6efd; color: white; align-self: flex-end; margin-left: auto; }
-        .message.agent { background-color: #f1f3f5; color: black; align-self: flex-start; margin-right: auto; border: 1px solid #dee2e6; }
-        .message.system { background-color: #ffc107; color: black; align-self: center; margin: 0 auto; text-align: center; }
-        .file-item { cursor: pointer; color: #adb5bd; }
-        .file-item:hover { color: white; }
-        pre code { background-color: #f8f9fa; padding: 10px; border-radius: 5px; display: block; overflow-x: auto; }
+        .chat-container { flex-grow: 1; overflow-y: auto; padding: 20px; background: #181825; }
+        .chat-input-container { padding: 20px; background: #11111b; border-top: 1px solid #313244; }
+        .message { margin-bottom: 15px; padding: 12px 16px; border-radius: 8px; max-width: 80%; line-height: 1.5; }
+        .message.user { background-color: #89b4fa; color: #11111b; align-self: flex-end; margin-left: auto; font-weight: 500; }
+        .message.agent { background-color: #313244; color: #cdd6f4; align-self: flex-start; margin-right: auto; border: 1px solid #45475a; }
+        .message.system { background-color: #f9e2af; color: #11111b; align-self: center; margin: 0 auto; text-align: center; font-size: 0.9rem; font-weight: 500; }
+        .file-item { cursor: pointer; color: #a6adc8; padding: 4px 8px; border-radius: 4px; transition: background 0.15s; }
+        .file-item:hover { color: #89b4fa; background: rgba(255,255,255,0.05); }
+        pre code { background-color: #1e1e2e; padding: 10px; border-radius: 5px; display: block; overflow-x: auto; }
         /* New Project Modal */
         .project-slug-preview { font-family: monospace; font-size: 0.85rem; background: #f1f3f5; border-radius: 4px; padding: 4px 8px; color: #495057; }
         .project-slug-preview.valid { border-left: 3px solid #198754; }
@@ -28,33 +31,34 @@
         #newProjectModal .modal-header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
         #newProjectModal .project-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
         /* Metrics bar */
-        .metrics-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #dee2e6; }
-        .metric-badge { font-size: 0.72rem; background: #e9ecef; color: #495057; border-radius: 20px; padding: 2px 10px; display: inline-flex; align-items: center; gap: 4px; }
-        .metric-badge .metric-value { font-weight: 700; color: #212529; }
+        .metrics-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #45475a; }
+        .metric-badge { font-size: 0.72rem; background: #1e1e2e; color: #a6adc8; border-radius: 20px; padding: 2px 10px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid #313244; }
+        .metric-badge .metric-value { font-weight: 700; color: #cdd6f4; }
         .message.agent pre { margin: 0 0 4px 0; }
         .message.agent pre code.hljs { border-radius: 0 0 6px 6px; font-size: 0.83rem; }
         /* Code block wrapper */
-        .code-block-wrapper { border-radius: 8px; overflow: hidden; margin: 8px 0; border: 1px solid #30363d; }
-        .code-block-header { background: #21262d; padding: 6px 14px; display: flex; justify-content: space-between; align-items: center; }
-        .code-lang-label { font-size: 0.72rem; color: #8b949e; font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em; }
-        .copy-btn { font-size: 0.72rem; background: transparent; border: 1px solid #30363d; color: #8b949e; border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: all 0.15s; }
-        .copy-btn:hover { background: #30363d; color: #e6edf3; }
-        .copy-btn.copied { border-color: #238636; color: #3fb950; }
-        /* Tools panel */
-        .tool-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .code-block-wrapper { border-radius: 8px; overflow: hidden; margin: 8px 0; border: 1px solid #45475a; }
+        .code-block-header { background: #11111b; padding: 6px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #313244; }
+        .code-lang-label { font-size: 0.72rem; color: #a6adc8; font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em; }
+        .copy-btn { font-size: 0.72rem; background: transparent; border: 1px solid #45475a; color: #a6adc8; border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: all 0.15s; }
+        .copy-btn:hover { background: #313244; color: #cdd6f4; }
+        .copy-btn.copied { border-color: #a6e3a1; color: #a6e3a1; }
+        /* Tools panel settings modal */
+        .tool-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #dee2e6; }
         .tool-toggle-row:last-child { border-bottom: none; }
-        .tool-label { font-size: 0.8rem; color: #ced4da; }
-        .tool-label.dangerous { color: #fd7e14; }
-        .tool-label .tool-name { font-family: monospace; font-weight: 600; }
+        .tool-label { font-size: 0.85rem; color: #212529; }
+        .tool-label.dangerous { color: #dc3545; }
+        .tool-label .tool-name { font-family: monospace; font-weight: 700; }
         .form-check-input:checked { background-color: #198754; border-color: #198754; }
         /* Tool call card */
         .tool-call-card { background: #1e1e2e; border: 1px solid #3d3d5c; border-radius: 6px; margin: 6px 0; overflow: hidden; }
         .tool-call-header { padding: 6px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
         .tool-call-header:hover { background: rgba(255,255,255,0.05); }
-        .tool-call-name { font-family: monospace; font-size: 0.82rem; color: #7dd3fc; font-weight: 600; }
-        .tool-call-args { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
-        .tool-call-body { padding: 8px 12px; background: #13131f; border-top: 1px solid #3d3d5c; display: none; }
-        .tool-call-body pre { margin: 0; font-size: 0.75rem; color: #a3e635; white-space: pre-wrap; }
+        .tool-call-name { font-family: monospace; font-size: 0.82rem; color: #89b4fa; font-weight: 600; }
+        .tool-call-args { font-size: 0.75rem; color: #a6adc8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+        .tool-call-body { padding: 8px 12px; background: #11111b; border-top: 1px solid #313244; display: none; }
+        .tool-call-body pre { margin: 0; font-size: 0.75rem; color: #a6e3a1; white-space: pre-wrap; }
+    </style>
     </style>
 </head>
 <body>
@@ -63,48 +67,44 @@
     <div class="row">
         <!-- Sidebar -->
         <div class="col-md-3 sidebar">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4>Agent Settings</h4>
-                <button class="btn btn-sm btn-outline-light" id="openSettingsBtn" title="Global Settings">⚙️</button>
-            </div>
-            
-            <div class="mb-3">
-                <label for="projectName" class="form-label">Active Project</label>
-                <div class="input-group">
-                    <input type="text" class="form-control" id="projectName" placeholder="e.g. my-awesome-app" value="default-project">
-                    <button class="btn btn-success" type="button" id="newProjectBtn" title="Create New Project">＋ New</button>
+            <div class="sidebar-content">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0 text-white">Chege Agent</h4>
                 </div>
+                
+                <div class="mb-3">
+                    <label for="projectSelect" class="form-label text-white-50">Active Project</label>
+                    <div class="input-group">
+                        <select class="form-select bg-dark text-white border-secondary" id="projectSelect">
+                            <option value="default-project">default-project</option>
+                        </select>
+                        <button class="btn btn-success" type="button" id="newProjectBtn" title="Create New Project">＋</button>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="modelSelect" class="form-label text-white-50">Select Model</label>
+                    <select class="form-select bg-dark text-white border-secondary" id="modelSelect">
+                        <option value="">Loading models...</option>
+                    </select>
+                </div>
+                
+                <hr class="border-secondary">
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 text-white-50">📁 Workspace Files</h6>
+                    <button class="btn btn-sm btn-outline-light py-0 px-2" id="refreshFilesBtn">↻</button>
+                </div>
+                <ul class="list-unstyled" id="fileList">
+                    <!-- Files will be populated here -->
+                </ul>
             </div>
 
-            <div class="mb-3">
-                <label for="modelSelect" class="form-label">Select Model</label>
-                <select class="form-select" id="modelSelect">
-                    <option value="">Loading models...</option>
-                </select>
+            <div class="sidebar-footer">
+                <button class="btn btn-warning w-100 mb-2 py-2 fw-semibold" id="viewDiffBtn">🔍 View Current Diffs</button>
+                <button class="btn btn-success w-100 mb-2 py-2 fw-semibold" id="commitBtn">💾 Commit Changes</button>
+                <button class="btn btn-outline-info w-100 py-2 fw-semibold" id="openSettingsBtn">⚙️ Global Settings</button>
             </div>
-            
-            <hr>
-
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0">🔧 Agent Tools</h6>
-                <button class="btn btn-sm btn-outline-secondary py-0" id="toggleAllToolsBtn">All On</button>
-            </div>
-            <div id="toolsList" style="max-height:180px;overflow-y:auto;">
-                <small class="text-muted">Loading tools...</small>
-            </div>
-
-            <hr>
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0">📁 Workspace Files</h6>
-                <button class="btn btn-sm btn-outline-light" id="refreshFilesBtn">↻</button>
-            </div>
-            <ul class="list-unstyled" id="fileList">
-                <!-- Files will be populated here -->
-            </ul>
-
-            <hr>
-            <button class="btn btn-warning w-100 mb-2" id="viewDiffBtn">View Current Diffs</button>
-            <button class="btn btn-success w-100" id="commitBtn">Commit Changes</button>
         </div>
 
         <!-- Main Content -->
@@ -159,58 +159,49 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title">⚙️ Ollama Settings</h5>
+                <h5 class="modal-title">⚙️ Agent & Ollama Settings</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-
-                <!-- Step 1: Enter URL -->
+            <div class="modal-body p-4">
+                
+                <!-- Section 1: Host config -->
                 <div class="mb-4">
-                    <label class="form-label fw-bold">Step 1 — Enter Ollama Host URL</label>
+                    <label class="form-label fw-bold">1. Ollama Host Connection</label>
                     <div class="input-group">
-                        <input type="text" class="form-control form-control-lg font-monospace"
+                        <input type="text" class="form-control font-monospace"
                                id="ollamaUrl"
                                placeholder="e.g. http://172.17.0.1:11434">
-                        <button class="btn btn-outline-secondary" type="button" id="detectHostBtn" title="Auto-detect host IP from inside the container">
+                        <button class="btn btn-outline-secondary" type="button" id="detectHostBtn">
                             <span id="detectSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
-                            🔍 Detect
+                            🔍 Detect Host
                         </button>
-                        <button class="btn btn-outline-dark" type="button" id="clearUrlBtn">✕ Clear</button>
+                        <button class="btn btn-outline-dark" type="button" id="testConnectionBtn">
+                            <span id="testSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                            🔌 Test
+                        </button>
                     </div>
-                    <div class="form-text mt-1">
-                        <strong>Docker on Linux:</strong> Click <em>Detect</em> or try <code>http://172.17.0.1:11434</code><br>
-                        <strong>Docker on Mac/Windows:</strong> <code>http://host.docker.internal:11434</code><br>
-                        <strong>Ollama must accept external connections:</strong> run
-                        <code>OLLAMA_HOST=0.0.0.0 ollama serve</code>
-                    </div>
+                    <div id="testResult" class="alert d-none mt-2 mb-0 py-2" role="alert"></div>
                 </div>
 
                 <hr>
 
-                <!-- Step 2: Test -->
+                <!-- Section 2: Active Tools -->
                 <div class="mb-4">
-                    <label class="form-label fw-bold">Step 2 — Test Connection</label><br>
-                    <button class="btn btn-outline-primary" type="button" id="testConnectionBtn">
-                        <span id="testSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
-                        🔌 Test Connection
-                    </button>
-                    <div id="testResult" class="alert d-none mt-3 mb-0 py-2" role="alert"></div>
-                </div>
-
-                <hr>
-
-                <!-- Step 3: Save -->
-                <div>
-                    <label class="form-label fw-bold">Step 3 — Save & Refresh</label><br>
-                    <button type="button" class="btn btn-success" id="saveSettingsBtn">
-                        💾 Save Settings & Refresh Models
-                    </button>
-                    <div id="saveResult" class="alert d-none mt-3 mb-0 py-2" role="alert"></div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-bold mb-0">2. Active Agent Tools</label>
+                        <button class="btn btn-sm btn-outline-secondary py-0" id="toggleAllToolsBtn">All On</button>
+                    </div>
+                    <div class="border rounded p-3 bg-light" id="toolsList" style="max-height: 280px; overflow-y: auto;">
+                        <small class="text-muted">Loading tools...</small>
+                    </div>
                 </div>
 
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success px-4" id="saveSettingsBtn">
+                    💾 Save Config & Refresh
+                </button>
             </div>
         </div>
     </div>
@@ -265,13 +256,9 @@
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
 
 <script>
-    // Relative API Base since we are serving this from FastAPI directly
     const API_BASE = '';
-
-    // Custom marked renderer — code blocks with syntax highlighting and copy button
     const renderer = new marked.Renderer();
     renderer.code = function(code, language) {
-        // Handle marked v4+ passing an object instead of two args
         if (typeof code === 'object' && code !== null) {
             language = code.lang || '';
             code = code.text || '';
@@ -314,7 +301,6 @@
                 btn.classList.remove('copied');
             }, 2000);
         }).catch(() => {
-            // Fallback for older browsers
             const ta = document.createElement('textarea');
             ta.value = el.innerText;
             document.body.appendChild(ta);
@@ -326,55 +312,7 @@
         });
     }
 
-    function renderMarkdown(text) {
-        return marked.parse(text);
-    }
-
-    function buildMetricsBar(metrics) {
-        if (!metrics) return '';
-        const m = metrics;
-        const tps = (m.tokens_per_sec && m.tokens_per_sec > 0) ? `${m.tokens_per_sec} tok/s` : '—';
-        const genTokens = m.tokens_generated || 0;
-        const promptTokens = m.prompt_tokens || 0;
-        const totalTime = m.total_time_s || 0;
-        const evalTime = m.eval_time_s || 0;
-        const loadTime = m.load_time_s || 0;
-        const toolIter = m.tool_iterations || 0;
-        const toolBadge = toolIter > 0
-            ? `<span class="metric-badge">🔧 <span class="metric-value">${toolIter}</span> tool call${toolIter > 1 ? 's' : ''}</span>`
-            : '';
-        return `
-        <div class="metrics-bar">
-            <span class="metric-badge">⚡ <span class="metric-value">${tps}</span></span>
-            <span class="metric-badge">🪙 <span class="metric-value">${genTokens}</span> generated</span>
-            <span class="metric-badge">📥 <span class="metric-value">${promptTokens}</span> prompt</span>
-            <span class="metric-badge">⏱ <span class="metric-value">${totalTime}s</span> total</span>
-            <span class="metric-badge">🧠 <span class="metric-value">${evalTime}s</span> eval</span>
-            ${loadTime > 0.1 ? `<span class="metric-badge">📦 <span class="metric-value">${loadTime}s</span> load</span>` : ''}
-            ${toolBadge}
-        </div>`;
-    }
-
-    function buildToolCallCards(toolCallLog) {
-        if (!toolCallLog || toolCallLog.length === 0) return '';
-        const cards = toolCallLog.map((tc, i) => {
-            const argsStr = JSON.stringify(tc.args).slice(0, 120);
-            const id = `tc-${Date.now()}-${i}`;
-            return `
-            <div class="tool-call-card">
-                <div class="tool-call-header" onclick="document.getElementById('${id}').style.display = document.getElementById('${id}').style.display === 'block' ? 'none' : 'block'">
-                    <span>🔧</span>
-                    <span class="tool-call-name">${tc.tool}</span>
-                    <span class="tool-call-args">${argsStr}</span>
-                    <span style="margin-left:auto;font-size:0.7rem;color:#64748b;">▼ result</span>
-                </div>
-                <div class="tool-call-body" id="${id}">
-                    <pre>${tc.result}</pre>
-                </div>
-            </div>`;
-        }).join('');
-        return `<div class="mb-2">${cards}</div>`;
-    }
+    function renderMarkdown(text) { return marked.parse(text); }
 
     function getEnabledTools() {
         const checked = [];
@@ -385,8 +323,8 @@
     }
 
     function getProject() {
-        let p = $('#projectName').val().trim();
-        return p ? p : 'default-project';
+        let p = $('#projectSelect').val();
+        return p ? p.trim() : 'default-project';
     }
 
     function scrollChat() {
@@ -412,163 +350,77 @@
     }
 
     $(document).ready(function() {
-        // Load settings and models
         $.get(`${API_BASE}/config`, function(data) {
             $('#ollamaUrl').val(data.ollama_url || 'http://host.docker.internal:11434');
             loadModels();
         }).fail(function() {
-            loadModels(); // attempt to load anyway
+            loadModels();
         });
 
-        // --- Settings Modal ---
         $('#openSettingsBtn').click(function() {
-            // Reset result boxes when opening
-            $('#testResult, #saveResult').addClass('d-none').text('');
+            $('#testResult').addClass('d-none').text('');
             new bootstrap.Modal(document.getElementById('settingsModal')).show();
         });
 
-        // Clear URL field
-        $('#clearUrlBtn').click(function() {
-            $('#ollamaUrl').val('').focus();
-            $('#testResult, #saveResult').addClass('d-none').text('');
-        });
-
-        // Auto-detect host IP from inside container
         $('#detectHostBtn').click(function() {
             $('#detectSpinner').removeClass('d-none');
             $('#detectHostBtn').prop('disabled', true);
             $.get(`${API_BASE}/config/detect-host`, function(data) {
                 if (data.status === 'ok') {
                     $('#ollamaUrl').val(data.suggested_url);
-                    $('#testResult')
-                        .removeClass('d-none alert-danger alert-warning')
-                        .addClass('alert-info')
-                        .html(`🔍 Detected host IP: <strong>${data.ip}</strong> (via ${data.label}). URL has been filled in — now test it!`);
-                    $('#testResult').removeClass('d-none');
+                    $('#testResult').removeClass('d-none alert-danger alert-warning').addClass('alert-info').html(`🔍 Detected host IP: <strong>${data.ip}</strong>`);
                 } else {
-                    $('#testResult')
-                        .removeClass('d-none alert-success alert-info')
-                        .addClass('alert-warning')
-                        .text(`⚠️ Auto-detect failed: ${data.message}. Try entering manually.`);
-                    $('#testResult').removeClass('d-none');
+                    $('#testResult').removeClass('d-none alert-success alert-info').addClass('alert-warning').text(`⚠️ Auto-detect failed: ${data.message}`);
                 }
             }).fail(function() {
-                $('#testResult')
-                    .removeClass('d-none alert-success alert-info')
-                    .addClass('alert-danger')
-                    .text('❌ Could not reach backend for detection.');
-                $('#testResult').removeClass('d-none');
+                $('#testResult').removeClass('d-none alert-success alert-info').addClass('alert-danger').text('❌ Could not reach backend.');
             }).always(function() {
                 $('#detectSpinner').addClass('d-none');
                 $('#detectHostBtn').prop('disabled', false);
             });
         });
 
-        // Test Connection
         $('#testConnectionBtn').click(function() {
             const url = $('#ollamaUrl').val().trim();
-            if (!url) {
-                $('#testResult')
-                    .removeClass('d-none alert-success alert-danger')
-                    .addClass('alert-warning')
-                    .text('⚠️ Please enter a URL first.');
-                $('#testResult').removeClass('d-none');
-                return;
-            }
             $('#testSpinner').removeClass('d-none');
-            $('#testConnectionBtn').prop('disabled', true);
-            $('#testResult').addClass('d-none');
-
             $.get(`${API_BASE}/config/test?url=${encodeURIComponent(url)}`, function(data) {
                 const isOk = data.status === 'ok';
-                $('#testResult')
-                    .removeClass('d-none alert-success alert-danger alert-warning alert-info')
-                    .addClass(isOk ? 'alert-success' : 'alert-danger')
-                    .text(data.message);
-                $('#testResult').removeClass('d-none');
-            }).fail(function() {
-                $('#testResult')
-                    .removeClass('d-none alert-success alert-danger alert-warning alert-info')
-                    .addClass('alert-danger')
-                    .text('❌ Could not reach the backend to perform the test.');
-                $('#testResult').removeClass('d-none');
-            }).always(function() {
+                $('#testResult').removeClass('d-none alert-success alert-danger alert-warning').addClass(isOk ? 'alert-success' : 'alert-danger').text(data.message);
+            }).fail(() => $('#testResult').removeClass('d-none').addClass('alert-danger').text('❌ Backend unreachable.')).always(() => {
                 $('#testSpinner').addClass('d-none');
-                $('#testConnectionBtn').prop('disabled', false);
             });
         });
 
-        // Save Settings & Refresh Models
         $('#saveSettingsBtn').click(function() {
             const newUrl = $('#ollamaUrl').val().trim();
-            if (!newUrl) {
-                $('#saveResult')
-                    .removeClass('d-none alert-success alert-danger')
-                    .addClass('alert-warning')
-                    .text('⚠️ URL cannot be empty.');
-                $('#saveResult').removeClass('d-none');
-                return;
-            }
             $.ajax({
                 url: `${API_BASE}/config`,
                 type: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify({ ollama_url: newUrl }),
                 success: function() {
-                    $('#saveResult')
-                        .removeClass('d-none alert-danger alert-warning')
-                        .addClass('alert-success')
-                        .text('✅ Settings saved! Refreshing models...');
-                    $('#saveResult').removeClass('d-none');
+                    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
                     loadModels();
-                },
-                error: function() {
-                    $('#saveResult')
-                        .removeClass('d-none alert-success alert-warning')
-                        .addClass('alert-danger')
-                        .text('❌ Failed to save settings.');
-                    $('#saveResult').removeClass('d-none');
                 }
             });
         });
 
-        // Clear results when URL is edited
-        $('#ollamaUrl').on('input', function() {
-            $('#testResult, #saveResult').addClass('d-none').text('');
-        });
-
-        // Clear results when modal closes
-        $('#settingsModal').on('hidden.bs.modal', function() {
-            $('#testResult, #saveResult').addClass('d-none').text('');
-        });
-
-        // Load tools into sidebar
         function loadTools() {
             $.get(`${API_BASE}/tools`, function(data) {
                 const list = $('#toolsList');
                 list.empty();
                 data.tools.forEach(tool => {
-                    const dangerClass = tool.dangerous ? 'dangerous' : '';
-                    const dangerBadge = tool.dangerous ? ' <span style="font-size:0.65rem;color:#fd7e14;">⚠ shell</span>' : '';
-                    // Enable all by default, disable run_command by default for safety
                     const defaultOn = tool.id !== 'run_command';
                     list.append(`
                         <div class="tool-toggle-row">
-                            <span class="tool-label ${dangerClass}">
-                                <span class="tool-name">${tool.id}</span>${dangerBadge}<br>
-                                <span style="font-size:0.7rem;color:#6c757d">${tool.description}</span>
-                            </span>
-                            <div class="form-check form-switch ms-2">
-                                <input class="form-check-input" type="checkbox" value="${tool.id}"
-                                    id="tool-${tool.id}" ${defaultOn ? 'checked' : ''}>
-                            </div>
+                            <span class="tool-label"><span class="tool-name">${tool.id}</span></span>
+                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" value="${tool.id}" ${defaultOn ? 'checked' : ''}></div>
                         </div>`);
                 });
             });
         }
         loadTools();
 
-        // Toggle all tools on/off
         let allOn = true;
         $('#toggleAllToolsBtn').click(function() {
             allOn = !allOn;
@@ -576,66 +428,42 @@
             $(this).text(allOn ? 'All On' : 'All Off');
         });
 
-        function loadProjectState() {
-            const project = getProject();
-            
-            // Load Files
-            $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
-                const list = $('#fileList');
-                list.empty();
-                if (data.files.length === 0) {
-                    list.append('<li><i>No files yet</i></li>');
+        // Load existing projects list
+        function loadProjectsList(selectAfter = null) {
+            $.get(`${API_BASE}/projects`, function(data) {
+                const select = $('#projectSelect');
+                select.empty();
+                if (!data.projects || data.projects.length === 0) {
+                    select.append('<option value="default-project">default-project</option>');
                 } else {
-                    data.files.forEach(file => {
-                        list.append(`<li class="file-item mb-1" data-file="${file}">📄 ${file}</li>`);
+                    data.projects.forEach(p => {
+                        select.append(`<option value="${p}">${p}</option>`);
                     });
                 }
-            });
-
-            // Load Chat History
-            $.get(`${API_BASE}/history?project_name=${project}`, function(data) {
-                const chat = $('#chatHistory');
-                chat.empty();
-                chat.append(`<div class="message system">Loaded project: ${project}</div>`);
-                
-                if (data.history) {
-                    data.history.forEach(msg => {
-                        if (msg.role === 'user') {
-                            chat.append(`<div class="message user">${marked.parse(msg.content)}</div>`);
-                        } else if (msg.role === 'assistant') {
-                            chat.append(`<div class="message agent">${marked.parse(msg.content)}</div>`);
-                        }
-                    });
+                if (selectAfter) {
+                    select.val(selectAfter);
                 }
-                scrollChat();
+                loadProjectState();
             });
         }
 
-        // Initialize state
-        loadProjectState();
-        
-        // Listen for project change
-        $('#projectName').on('blur', function() {
+        loadProjectsList();
+
+        $('#projectSelect').on('change', function() {
             loadProjectState();
         });
-        $('#projectName').on('keypress', function(e) {
-            if(e.which === 13) {
-                $(this).blur();
-            }
-        });
-        
+
         // New Project Modal
         function toSlug(name) {
             return name.toLowerCase()
                 .trim()
-                .replace(/[^a-z0-9\s-]/g, '')   // remove special chars
-                .replace(/\s+/g, '-')            // spaces to hyphens
-                .replace(/-+/g, '-')             // collapse multiple hyphens
-                .replace(/^-|-$/g, '');          // trim leading/trailing hyphens
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
         }
 
         $('#newProjectBtn').click(function() {
-            // Reset modal state
             $('#newProjectNameInput').val('');
             $('#newProjectDesc').val('');
             $('#slugPreview').text('—').removeClass('valid invalid');
@@ -645,7 +473,6 @@
             setTimeout(() => $('#newProjectNameInput').focus(), 300);
         });
 
-        // Live slug preview + validation
         $('#newProjectNameInput').on('input', function() {
             const raw = $(this).val();
             const slug = toSlug(raw);
@@ -672,35 +499,69 @@
             createBtn.prop('disabled', false);
         });
 
-        // Enter key submits
         $('#newProjectNameInput').on('keydown', function(e) {
             if (e.which === 13 && !$('#createProjectBtn').prop('disabled')) {
                 $('#createProjectBtn').click();
             }
         });
 
-        // Create project
         $('#createProjectBtn').click(function() {
             const slug = toSlug($('#newProjectNameInput').val());
             if (!slug) return;
 
-            // Switch active project and load its state
             bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
-            $('#projectName').val(slug);
+            
+            const select = $('#projectSelect');
+            if (select.find(`option[value="${slug}"]`).length === 0) {
+                select.append(`<option value="${slug}">${slug}</option>`);
+            }
+            select.val(slug);
             loadProjectState();
 
-            // Show confirmation in chat
             const desc = $('#newProjectDesc').val().trim();
             const note = desc ? ` — <em>${desc}</em>` : '';
             $('#chatHistory').append(
                 `<div class="message system">🗂️ New project created: <strong>${slug}</strong>${note}</div>`
             );
             scrollChat();
+            loadProjectsList(slug);
         });
+
+        function loadProjectState() {
+            const project = getProject();
+            
+            $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
+                const list = $('#fileList');
+                list.empty();
+                if (!data.files || data.files.length === 0) {
+                    list.append('<li><i class="text-white-50 ps-2">No files yet</i></li>');
+                } else {
+                    data.files.forEach(file => {
+                        list.append(`<li class="file-item mb-1" data-file="${file}">📄 ${file}</li>`);
+                    });
+                }
+            });
+
+            $.get(`${API_BASE}/history?project_name=${project}`, function(data) {
+                const chat = $('#chatHistory');
+                chat.empty();
+                chat.append(`<div class="message system">Loaded project: ${project}</div>`);
+                
+                if (data.history) {
+                    data.history.forEach(msg => {
+                        if (msg.role === 'user') {
+                            chat.append(`<div class="message user">${renderMarkdown(msg.content)}</div>`);
+                        } else if (msg.role === 'assistant') {
+                            chat.append(`<div class="message agent">${renderMarkdown(msg.content)}</div>`);
+                        }
+                    });
+                }
+                scrollChat();
+            });
+        }
 
         $('#refreshFilesBtn').click(loadProjectState);
 
-        // View File
         $(document).on('click', '.file-item', function() {
             const file = $(this).data('file');
             const project = getProject();
@@ -711,7 +572,6 @@
             });
         });
 
-        // View Diff
         $('#viewDiffBtn').click(function() {
             const project = getProject();
             $.get(`${API_BASE}/diff?project_name=${project}`, function(data) {
@@ -730,7 +590,6 @@
             });
         });
 
-        // Commit Changes
         $('#commitBtn').click(function() {
             const project = getProject();
             $.ajax({
@@ -744,7 +603,6 @@
             });
         });
 
-        // Send Chat
         $('#chatForm').submit(function(e) {
             e.preventDefault();
             const msg = $('#chatInput').val().trim();
@@ -753,7 +611,7 @@
             
             if (!msg || !model) return;
 
-            $('#chatHistory').append(`<div class="message user">${msg}</div>`);
+            $('#chatHistory').append(`<div class="message user">${renderMarkdown(msg)}</div>`);
             $('#chatInput').val('');
             
             const loadingId = 'loading-' + Date.now();
@@ -773,7 +631,6 @@
                 success: function(response) {
                     $(`#${loadingId}`).remove();
 
-                    // Render tool call cards above the reply
                     let html = buildToolCallCards(response.tool_call_log);
                     html += renderMarkdown(response.reply);
 
@@ -798,14 +655,13 @@
                     html += buildMetricsBar(response.metrics);
 
                     const msgEl = $(`<div class="message agent">${html}</div>`);
-                    // Apply highlight.js to any code blocks that marked missed
                     msgEl.find('pre code').each(function() {
                         hljs.highlightElement(this);
                     });
                     $('#chatHistory').append(msgEl);
                     scrollChat();
                 },
-                error: function(err) {
+                error: function() {
                     $(`#${loadingId}`).text("Error communicating with backend.");
                 }
             });
