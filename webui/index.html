@@ -31,8 +31,15 @@
         .metrics-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #dee2e6; }
         .metric-badge { font-size: 0.72rem; background: #e9ecef; color: #495057; border-radius: 20px; padding: 2px 10px; display: inline-flex; align-items: center; gap: 4px; }
         .metric-badge .metric-value { font-weight: 700; color: #212529; }
-        .message.agent pre { margin: 0; }
-        .message.agent pre code.hljs { border-radius: 6px; font-size: 0.85rem; }
+        .message.agent pre { margin: 0 0 4px 0; }
+        .message.agent pre code.hljs { border-radius: 0 0 6px 6px; font-size: 0.83rem; }
+        /* Code block wrapper */
+        .code-block-wrapper { border-radius: 8px; overflow: hidden; margin: 8px 0; border: 1px solid #30363d; }
+        .code-block-header { background: #21262d; padding: 6px 14px; display: flex; justify-content: space-between; align-items: center; }
+        .code-lang-label { font-size: 0.72rem; color: #8b949e; font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em; }
+        .copy-btn { font-size: 0.72rem; background: transparent; border: 1px solid #30363d; color: #8b949e; border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: all 0.15s; }
+        .copy-btn:hover { background: #30363d; color: #e6edf3; }
+        .copy-btn.copied { border-color: #238636; color: #3fb950; }
         /* Tools panel */
         .tool-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
         .tool-toggle-row:last-child { border-bottom: none; }
@@ -261,18 +268,63 @@
     // Relative API Base since we are serving this from FastAPI directly
     const API_BASE = '';
 
-    // Configure marked.js to use highlight.js for code blocks
-    marked.setOptions({
-        highlight: function(code, lang) {
+    // Custom marked renderer — code blocks with syntax highlighting and copy button
+    const renderer = new marked.Renderer();
+    renderer.code = function(code, language) {
+        // Handle marked v4+ passing an object instead of two args
+        if (typeof code === 'object' && code !== null) {
+            language = code.lang || '';
+            code = code.text || '';
+        }
+        const lang = (language || 'plaintext').toLowerCase();
+        let highlighted;
+        try {
             if (lang && hljs.getLanguage(lang)) {
-                return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+                highlighted = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+            } else {
+                highlighted = hljs.highlightAuto(code).value;
             }
-            return hljs.highlightAuto(code).value;
-        },
-        langPrefix: 'hljs language-',
-        breaks: true,
-        gfm: true
-    });
+        } catch(e) {
+            highlighted = marked.Lexer.escapeTest.test(code)
+                ? code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                : code;
+        }
+        const id = 'cb-' + Math.random().toString(36).slice(2, 9);
+        return `
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-label">${lang}</span>
+    <button class="copy-btn" id="btn-${id}" onclick="copyCode('${id}', 'btn-${id}')">📋 Copy</button>
+  </div>
+  <pre><code id="${id}" class="hljs language-${lang}">${highlighted}</code></pre>
+</div>`;
+    };
+
+    marked.use({ renderer, breaks: true, gfm: true });
+
+    function copyCode(codeId, btnId) {
+        const el = document.getElementById(codeId);
+        const btn = document.getElementById(btnId);
+        if (!el || !btn) return;
+        navigator.clipboard.writeText(el.innerText).then(() => {
+            btn.textContent = '✅ Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.textContent = '📋 Copy';
+                btn.classList.remove('copied');
+            }, 2000);
+        }).catch(() => {
+            // Fallback for older browsers
+            const ta = document.createElement('textarea');
+            ta.value = el.innerText;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            btn.textContent = '✅ Copied!';
+            setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+        });
+    }
 
     function renderMarkdown(text) {
         return marked.parse(text);
@@ -281,18 +333,24 @@
     function buildMetricsBar(metrics) {
         if (!metrics) return '';
         const m = metrics;
-        const tps = m.tokens_per_sec > 0 ? `${m.tokens_per_sec} tok/s` : 'n/a';
-        const toolBadge = m.tool_iterations > 0
-            ? `<span class="metric-badge">🔧 <span class="metric-value">${m.tool_iterations}</span> tool call${m.tool_iterations > 1 ? 's' : ''}</span>`
+        const tps = (m.tokens_per_sec && m.tokens_per_sec > 0) ? `${m.tokens_per_sec} tok/s` : '—';
+        const genTokens = m.tokens_generated || 0;
+        const promptTokens = m.prompt_tokens || 0;
+        const totalTime = m.total_time_s || 0;
+        const evalTime = m.eval_time_s || 0;
+        const loadTime = m.load_time_s || 0;
+        const toolIter = m.tool_iterations || 0;
+        const toolBadge = toolIter > 0
+            ? `<span class="metric-badge">🔧 <span class="metric-value">${toolIter}</span> tool call${toolIter > 1 ? 's' : ''}</span>`
             : '';
         return `
         <div class="metrics-bar">
             <span class="metric-badge">⚡ <span class="metric-value">${tps}</span></span>
-            <span class="metric-badge">🪙 <span class="metric-value">${m.tokens_generated}</span> generated</span>
-            <span class="metric-badge">📥 <span class="metric-value">${m.prompt_tokens}</span> prompt tokens</span>
-            <span class="metric-badge">⏱ <span class="metric-value">${m.total_time_s}s</span> total</span>
-            <span class="metric-badge">🧠 <span class="metric-value">${m.eval_time_s}s</span> eval</span>
-            ${m.load_time_s > 0.1 ? `<span class="metric-badge">📦 <span class="metric-value">${m.load_time_s}s</span> load</span>` : ''}
+            <span class="metric-badge">🪙 <span class="metric-value">${genTokens}</span> generated</span>
+            <span class="metric-badge">📥 <span class="metric-value">${promptTokens}</span> prompt</span>
+            <span class="metric-badge">⏱ <span class="metric-value">${totalTime}s</span> total</span>
+            <span class="metric-badge">🧠 <span class="metric-value">${evalTime}s</span> eval</span>
+            ${loadTime > 0.1 ? `<span class="metric-badge">📦 <span class="metric-value">${loadTime}s</span> load</span>` : ''}
             ${toolBadge}
         </div>`;
     }

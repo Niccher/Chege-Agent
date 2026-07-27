@@ -57,6 +57,19 @@ def get_project_dirs(project_name: str):
         subprocess.run(["git", "config", "user.name", "Coding Agent"], cwd=work_dir, capture_output=True)
     return work_dir, logs_dir
 
+def safe_metric(response, key: str, default=0):
+    """Extract a metric from an Ollama response that may be a Pydantic model or a dict."""
+    if response is None:
+        return default
+    # Try attribute access first (Pydantic model / newer ollama library)
+    if hasattr(response, key):
+        val = getattr(response, key)
+        return val if val is not None else default
+    # Fall back to dict-style access
+    if hasattr(response, "get"):
+        return response.get(key, default) or default
+    return default
+
 # ---------------------------------------------------------------------------
 # Tool definitions (JSON schemas for Ollama)
 # ---------------------------------------------------------------------------
@@ -542,12 +555,24 @@ async def chat(request: ChatRequest):
                 messages = json.load(f)
 
         system_instruction = (
-            "You are an expert coding agent with access to tools that let you read and write files, "
-            "run commands, and manage git in the project workspace. "
-            "Always read existing files before modifying them. "
-            "When you create or modify files WITHOUT using the write_file tool, "
-            "use the XML format: <file path=\"filename.ext\">content</file>. "
-            "Prefer using tools over XML tags when tools are available."
+            "You are Chege, a senior software engineering assistant running inside an isolated project workspace. "
+            "Your primary role is to help design, write, refactor, debug, and review code. "
+            "You can also handle general tasks such as writing documentation, explaining concepts, and answering questions.\n\n"
+            "## Workspace Rules\n"
+            "- You have tools to read, write, list, delete files and run shell commands — use them proactively.\n"
+            "- Always call list_files or read_file FIRST before creating or editing anything to understand what already exists.\n"
+            "- Never overwrite a file without reading it first unless explicitly told to start fresh.\n"
+            "- All file paths are relative to the project workspace root.\n\n"
+            "## Code Quality Rules\n"
+            "- Write production-quality code: add comments, handle errors, follow language idioms.\n"
+            "- When writing Python, follow PEP 8. For JS/TS follow modern ES6+ conventions.\n"
+            "- After writing code, use run_command to verify it runs without errors when possible.\n"
+            "- If a command fails, read the error, fix the code, and retry — do not give up after one failure.\n\n"
+            "## Output Rules\n"
+            "- Prefer using the write_file tool to save files. "
+            "If tools are unavailable, use: <file path=\"name.ext\">content</file>\n"
+            "- Use markdown for explanations. Format code in triple-backtick fences with the language tag.\n"
+            "- Be concise in explanations — the user can see the files; do not repeat code you just wrote.\n"
             f"{request.system_prompt}"
         )
 
@@ -636,12 +661,12 @@ async def chat(request: ChatRequest):
         with open(history_file, "w") as f:
             json.dump(clean_messages, f, indent=2)
 
-        # Metrics
-        eval_count        = final_response.get("eval_count", 0) if final_response else 0
-        eval_duration_ns  = final_response.get("eval_duration", 0) if final_response else 0
-        prompt_eval_count = final_response.get("prompt_eval_count", 0) if final_response else 0
-        total_duration_ns = final_response.get("total_duration", 0) if final_response else 0
-        load_duration_ns  = final_response.get("load_duration", 0) if final_response else 0
+        # Metrics — handle both Pydantic model objects (new ollama lib) and plain dicts
+        eval_count        = safe_metric(final_response, "eval_count")
+        eval_duration_ns  = safe_metric(final_response, "eval_duration")
+        prompt_eval_count = safe_metric(final_response, "prompt_eval_count")
+        total_duration_ns = safe_metric(final_response, "total_duration")
+        load_duration_ns  = safe_metric(final_response, "load_duration")
 
         tokens_per_sec = round(eval_count / (eval_duration_ns / 1e9), 2) if eval_duration_ns > 0 else 0
 
