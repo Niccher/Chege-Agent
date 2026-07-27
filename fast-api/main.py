@@ -7,6 +7,7 @@ import os
 import subprocess
 import re
 import json
+import urllib.request
 
 app = FastAPI()
 
@@ -80,6 +81,25 @@ async def update_config(request: Request):
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/config/test")
+async def test_ollama_connection(url: str):
+    """Test if an Ollama instance is reachable at the given URL."""
+    try:
+        test_url = url.rstrip("/") + "/api/tags"
+        req = urllib.request.Request(test_url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read().decode())
+            model_count = len(body.get("models", []))
+            return {
+                "status": "ok",
+                "message": f"✅ Connected! Found {model_count} model(s).",
+                "model_count": model_count
+            }
+    except urllib.error.URLError as e:
+        return {"status": "error", "message": f"❌ Cannot reach Ollama: {str(e.reason)}"}
+    except Exception as e:
+        return {"status": "error", "message": f"❌ Unexpected error: {str(e)}"}
 
 @app.get("/models")
 async def get_models():
