@@ -264,30 +264,53 @@ async def chat(request: ChatRequest):
         response = client.chat(model=request.model, messages=messages)
         reply_content = response['message']['content']
         messages.append({"role": "assistant", "content": reply_content})
-        
+
         with open(history_file, "w") as f:
             json.dump(messages, f, indent=2)
 
+        # Extract Ollama performance metrics (durations are in nanoseconds)
+        eval_count        = response.get('eval_count', 0)         # tokens generated
+        eval_duration_ns  = response.get('eval_duration', 0)      # generation time (ns)
+        prompt_eval_count = response.get('prompt_eval_count', 0)  # prompt tokens
+        total_duration_ns = response.get('total_duration', 0)     # total wall time (ns)
+        load_duration_ns  = response.get('load_duration', 0)      # model load time (ns)
+
+        tokens_per_sec  = round(eval_count / (eval_duration_ns / 1e9), 2) if eval_duration_ns > 0 else 0
+        total_seconds   = round(total_duration_ns / 1e9, 2)
+        eval_seconds    = round(eval_duration_ns / 1e9, 2)
+        load_seconds    = round(load_duration_ns / 1e9, 2)
+
+        metrics = {
+            "tokens_generated":  eval_count,
+            "prompt_tokens":     prompt_eval_count,
+            "total_tokens":      eval_count + prompt_eval_count,
+            "tokens_per_sec":    tokens_per_sec,
+            "eval_time_s":       eval_seconds,
+            "total_time_s":      total_seconds,
+            "load_time_s":       load_seconds,
+        }
+
         file_pattern = r'<file\s+path="([^"]+)">\s*(.*?)\s*</file>'
         matches = re.finditer(file_pattern, reply_content, re.DOTALL)
-        
+
         saved_files = []
         for match in matches:
             filepath = match.group(1)
             content = match.group(2)
-            
+
             full_path = os.path.abspath(os.path.join(work_dir, filepath))
             if not full_path.startswith(work_dir):
                 continue
-                
+
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(content)
             saved_files.append(filepath)
 
         return {
-            "reply": reply_content,
-            "saved_files": saved_files
+            "reply":       reply_content,
+            "saved_files": saved_files,
+            "metrics":     metrics,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
