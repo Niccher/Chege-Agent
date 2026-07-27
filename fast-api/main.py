@@ -387,6 +387,9 @@ class ChatRequest(BaseModel):
     system_prompt: str = ""
     enabled_tools: list = []   # list of tool IDs the user has toggled on
 
+class CommitRequest(BaseModel):
+    project_name: str
+
 # ---------------------------------------------------------------------------
 # API Routes
 # ---------------------------------------------------------------------------
@@ -552,10 +555,9 @@ def get_diff(project_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/commit")
-def commit_changes(request: Request):
+def commit_changes(request: CommitRequest):
     try:
-        data = await request.json()
-        project_name = data.get("project_name")
+        project_name = request.project_name
         work_dir, _ = get_project_dirs(project_name)
         subprocess.run(["git", "add", "."], cwd=work_dir, capture_output=True)
         subprocess.run(["git", "commit", "-m", "Agent update"], cwd=work_dir, capture_output=True)
