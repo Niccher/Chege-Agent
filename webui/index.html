@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Agent WebUI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" />
+    <style>
+        body { height: 100vh; overflow: hidden; background-color: #f8f9fa; }
+        .sidebar { height: 100vh; background-color: #343a40; color: white; padding: 20px; overflow-y: auto; }
+        .main-content { height: 100vh; display: flex; flex-direction: column; }
+        .chat-container { flex-grow: 1; overflow-y: auto; padding: 20px; background: white; }
+        .chat-input-container { padding: 20px; background: #e9ecef; border-top: 1px solid #dee2e6; }
+        .message { margin-bottom: 15px; padding: 10px; border-radius: 8px; max-width: 80%; }
+        .message.user { background-color: #0d6efd; color: white; align-self: flex-end; margin-left: auto; }
+        .message.agent { background-color: #f1f3f5; color: black; align-self: flex-start; margin-right: auto; border: 1px solid #dee2e6; }
+        .message.system { background-color: #ffc107; color: black; align-self: center; margin: 0 auto; text-align: center; }
+        .file-item { cursor: pointer; color: #adb5bd; }
+        .file-item:hover { color: white; }
+        pre code { background-color: #f8f9fa; padding: 10px; border-radius: 5px; display: block; overflow-x: auto; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar">
+            <h4>Agent Settings</h4>
+            
+            <div class="mb-3">
+                <label for="projectName" class="form-label">Project Name</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="projectName" placeholder="e.g. my-awesome-app" value="default-project">
+                    <button class="btn btn-outline-light" type="button" id="newProjectBtn">New</button>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="modelSelect" class="form-label">Select Model</label>
+                <select class="form-select" id="modelSelect">
+                    <option value="">Loading models...</option>
+                </select>
+            </div>
+            
+            <hr>
+            
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Workspace Files</h4>
+                <button class="btn btn-sm btn-outline-light" id="refreshFilesBtn">Refresh</button>
+            </div>
+            <ul class="list-unstyled" id="fileList">
+                <!-- Files will be populated here -->
+            </ul>
+
+            <hr>
+            <button class="btn btn-warning w-100 mb-2" id="viewDiffBtn">View Current Diffs</button>
+            <button class="btn btn-success w-100" id="commitBtn">Commit Changes</button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 main-content p-0">
+            <div class="chat-container d-flex flex-column" id="chatHistory">
+                <div class="message system">
+                    Welcome! Switch projects in the sidebar to load history, or start chatting below.
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <form id="chatForm" class="d-flex">
+                    <textarea class="form-control me-2" id="chatInput" rows="2" placeholder="Ask the agent to build something..." required></textarea>
+                    <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- File Viewer Modal -->
+<div class="modal fade" id="fileModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fileModalTitle">File Viewer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre><code id="fileModalContent"></code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Diff Viewer Modal -->
+<div class="modal fade" id="diffModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Git Diffs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="diffModalContent">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
+
+<script>
+    const API_BASE = 'http://localhost:8000';
+
+    function getProject() {
+        let p = $('#projectName').val().trim();
+        return p ? p : 'default-project';
+    }
+
+    function scrollChat() {
+        const chatContainer = document.getElementById('chatHistory');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    $(document).ready(function() {
+        // Load Models
+        $.get(`${API_BASE}/models`, function(data) {
+            const select = $('#modelSelect');
+            select.empty();
+            if (data.models.length === 0) {
+                select.append('<option>No models found.</option>');
+            } else {
+                data.models.forEach(model => {
+                    select.append(`<option value="${model}">${model}</option>`);
+                });
+            }
+        });
+
+        // Load History & Files when project changes
+        function loadProjectState() {
+            const project = getProject();
+            
+            // Load Files
+            $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
+                const list = $('#fileList');
+                list.empty();
+                if (data.files.length === 0) {
+                    list.append('<li><i>No files yet</i></li>');
+                } else {
+                    data.files.forEach(file => {
+                        list.append(`<li class="file-item mb-1" data-file="${file}">📄 ${file}</li>`);
+                    });
+                }
+            });
+
+            // Load Chat History
+            $.get(`${API_BASE}/history?project_name=${project}`, function(data) {
+                const chat = $('#chatHistory');
+                chat.empty();
+                chat.append(`<div class="message system">Loaded project: ${project}</div>`);
+                
+                if (data.history) {
+                    data.history.forEach(msg => {
+                        if (msg.role === 'user') {
+                            chat.append(`<div class="message user">${marked.parse(msg.content)}</div>`);
+                        } else if (msg.role === 'assistant') {
+                            chat.append(`<div class="message agent">${marked.parse(msg.content)}</div>`);
+                        }
+                    });
+                }
+                scrollChat();
+            });
+        }
+
+        // Initialize state
+        loadProjectState();
+        
+        // Listen for project change
+        $('#projectName').on('blur', function() {
+            loadProjectState();
+        });
+        $('#projectName').on('keypress', function(e) {
+            if(e.which === 13) {
+                $(this).blur();
+            }
+        });
+        
+        // New Project Button
+        $('#newProjectBtn').click(function() {
+            const newName = prompt("Enter new project name:");
+            if (newName && newName.trim() !== "") {
+                $('#projectName').val(newName.trim());
+                loadProjectState();
+            }
+        });
+
+        $('#refreshFilesBtn').click(loadProjectState);
+
+        // View File
+        $(document).on('click', '.file-item', function() {
+            const file = $(this).data('file');
+            const project = getProject();
+            $.get(`${API_BASE}/files/${file}?project_name=${project}`, function(data) {
+                $('#fileModalTitle').text(file);
+                $('#fileModalContent').text(data.content);
+                new bootstrap.Modal(document.getElementById('fileModal')).show();
+            });
+        });
+
+        // View Diff
+        $('#viewDiffBtn').click(function() {
+            const project = getProject();
+            $.get(`${API_BASE}/diff?project_name=${project}`, function(data) {
+                if (!data.diff) {
+                    $('#diffModalContent').html('<p>No changes detected.</p>');
+                } else {
+                    $('#diffModalContent').empty();
+                    const diffHtml = new Diff2HtmlUI(document.getElementById('diffModalContent'), data.diff, {
+                        drawFileList: true,
+                        matching: 'lines',
+                        outputFormat: 'line-by-line'
+                    });
+                    diffHtml.draw();
+                }
+                new bootstrap.Modal(document.getElementById('diffModal')).show();
+            });
+        });
+
+        // Commit Changes
+        $('#commitBtn').click(function() {
+            const project = getProject();
+            $.ajax({
+                url: `${API_BASE}/commit`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ project_name: project }),
+                success: function() {
+                    alert("Changes committed to local git repo!");
+                }
+            });
+        });
+
+        // Send Chat
+        $('#chatForm').submit(function(e) {
+            e.preventDefault();
+            const msg = $('#chatInput').val().trim();
+            const model = $('#modelSelect').val();
+            const project = getProject();
+            
+            if (!msg || !model) return;
+
+            $('#chatHistory').append(`<div class="message user">${msg}</div>`);
+            $('#chatInput').val('');
+            
+            const loadingId = 'loading-' + Date.now();
+            $('#chatHistory').append(`<div class="message agent" id="${loadingId}">Thinking...</div>`);
+            scrollChat();
+
+            $.ajax({
+                url: `${API_BASE}/chat`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    model: model,
+                    message: msg,
+                    project_name: project
+                }),
+                success: function(response) {
+                    $(`#${loadingId}`).remove();
+                    let replyHtml = marked.parse(response.reply);
+                    
+                    if (response.saved_files && response.saved_files.length > 0) {
+                        replyHtml += '<hr><strong>Files updated:</strong><ul>';
+                        response.saved_files.forEach(f => {
+                            replyHtml += `<li>${f}</li>`;
+                        });
+                        replyHtml += '</ul>';
+                        
+                        // Just refresh file list quietly
+                        $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
+                            const list = $('#fileList');
+                            list.empty();
+                            if (data.files) {
+                                data.files.forEach(file => {
+                                    list.append(`<li class="file-item mb-1" data-file="${file}">📄 ${file}</li>`);
+                                });
+                            }
+                        });
+                    }
+
+                    $('#chatHistory').append(`<div class="message agent">${replyHtml}</div>`);
+                    scrollChat();
+                },
+                error: function(err) {
+                    $(`#${loadingId}`).text("Error communicating with backend.");
+                }
+            });
+        });
+
+        $('#chatInput').keydown(function(e) {
+            if (e.keyCode == 13 && !e.shiftKey) {
+                e.preventDefault();
+                $('#chatForm').submit();
+            }
+        });
+    });
+</script>
+</body>
+</html>
