@@ -578,6 +578,76 @@ def get_history(project_name: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def parse_embedded_tool_calls(content: str) -> list:
+    """
+    Search for JSON blobs in text content that represent tool calls.
+    Returns a list of dicts in the form:
+    [{"function": {"name": "...", "arguments": {...}}}]
+    """
+    if not content:
+        return []
+    
+    # 1. Look for ```json ... ``` blocks
+    json_blocks = re.findall(r'```json\s*(.*?)\s*```', content, re.DOTALL)
+    
+    # 2. Also check if the entire content (stripped) is a valid JSON
+    if not json_blocks:
+        stripped = content.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            json_blocks = [stripped]
+            
+    # 3. If still nothing, try finding any substring starting with { and ending with }
+    if not json_blocks:
+        matches = re.finditer(r'(\{.*?\})', content, re.DOTALL)
+        for match in matches:
+            json_blocks.append(match.group(1))
+            
+    tool_calls = []
+    for block in json_blocks:
+        try:
+            data = json.loads(block.strip())
+            # If it's a list, process each element
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                
+                # Check if it has the name/arguments pattern
+                name = None
+                args = None
+                
+                # Format A: {"name": "...", "arguments": {...}}
+                if "name" in item and "arguments" in item:
+                    name = item["name"]
+                    args = item["arguments"]
+                # Format B: {"function": {"name": "...", "arguments": {...}}}
+                elif "function" in item and isinstance(item["function"], dict):
+                    fn = item["function"]
+                    name = fn.get("name")
+                    args = fn.get("arguments")
+                
+                if name and isinstance(args, dict):
+                    # Clean up argument schema nested definitions if present
+                    # e.g. {"path": {"type": "string", "value": "hello.py"}}
+                    cleaned_args = {}
+                    for k, v in args.items():
+                        if isinstance(v, dict) and "value" in v:
+                            cleaned_args[k] = v["value"]
+                        else:
+                            cleaned_args[k] = v
+                    
+                    tool_calls.append({
+                        "function": {
+                            "name": name,
+                            "arguments": cleaned_args
+                        }
+                    })
+        except Exception:
+            continue
+            
+    return tool_calls
+
+
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
@@ -652,6 +722,10 @@ def chat(request: ChatRequest):
 
             # Build a plain-dict version of the assistant message for the history list
             reply_content_now = _get(reply_msg, "content") or ""
+
+            # Fallback: if no native tool calls were returned, check if there are embedded JSON tool calls in content
+            if not tool_calls and reply_content_now:
+                tool_calls = parse_embedded_tool_calls(reply_content_now)
 
             if not tool_calls:
                 # ── Final text answer ────────────────────────────────────────────
@@ -729,11 +803,23 @@ def chat(request: ChatRequest):
                     f.write(content)
                 saved_files.append(filepath)
 
-        # Persist conversation — keep tool messages so the agent has full context
-        # on the next turn. Only exclude raw Pydantic objects (they're not JSON-safe).
-        safe_messages = [m for m in messages if isinstance(m, dict)]
-        with open(history_file, "w") as f:
-            json.dump(safe_messages, f, indent=2)
+        # Markdown block file fallback (e.g. ```javascript\n// script.js\n... ```)
+        for block_match in re.finditer(r'```[a-zA-Z0-9+#-]*\s*(.*?)\s*```', reply_content, re.DOTALL):
+            block_text = block_match.group(1)
+            lines = block_text.splitlines()
+            if lines:
+                first_line = lines[0].strip()
+                # Match formats like: // filename.ext, # filename.ext, /* filename.ext */, <!-- filename.ext -->
+                filename_match = re.match(r'^(?://|#|/\*|<!--)\s*([a-zA-Z0-9_\-\.\/]+)\s*(?:\*/|-->)?$', first_line)
+                if filename_match:
+                    filepath = filename_match.group(1)
+                    file_content = "\n".join(lines[1:])
+                    full_path = os.path.abspath(os.path.join(work_dir, filepath))
+                    if full_path.startswith(work_dir):
+                        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                        with open(full_path, "w", encoding="utf-8") as f:
+                            f.write(file_content)
+                        saved_files.append(filepath)
 
         # Metrics — handle both Pydantic model objects (new ollama lib) and plain dicts
         eval_count        = safe_metric(final_response, "eval_count")
@@ -754,6 +840,17 @@ def chat(request: ChatRequest):
             "load_time_s":      round(load_duration_ns / 1e9, 2),
             "tool_iterations":  len([t for t in tool_call_log]),
         }
+
+        # Update the last assistant message with metrics and tool calls log for persistence
+        if messages and messages[-1].get("role") == "assistant":
+            messages[-1]["_metrics"] = metrics
+            messages[-1]["_tool_calls"] = tool_call_log
+
+        # Persist conversation — keep tool messages so the agent has full context
+        # on the next turn. Only exclude raw Pydantic objects (they're not JSON-safe).
+        safe_messages = [m for m in messages if isinstance(m, dict)]
+        with open(history_file, "w") as f:
+            json.dump(safe_messages, f, indent=2)
 
         return {
             "reply":          reply_content,

@@ -655,7 +655,14 @@
                         if (msg.role === 'user') {
                             chat.append(`<div class="message user">${renderMarkdown(msg.content)}</div>`);
                         } else if (msg.role === 'assistant') {
-                            chat.append(`<div class="message agent">${renderMarkdown(msg.content)}</div>`);
+                            let html = buildToolCallCards(msg._tool_calls);
+                            html += renderMarkdown(msg.content);
+                            html += buildMetricsBar(msg._metrics);
+                            const msgEl = $(`<div class="message agent">${html}</div>`);
+                            msgEl.find('pre code').each(function() {
+                                hljs.highlightElement(this);
+                            });
+                            chat.append(msgEl);
                         }
                     });
                 }
