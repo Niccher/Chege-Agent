@@ -8,6 +8,10 @@ services:
     ports:
       - "9100:9100"
     volumes:
+      # Live source mounts — changes here are picked up instantly by uvicorn --reload
+      - ./fast-api:/app/fast-api
+      - ./webui:/app/webui
+      # Persistent data — survives container restarts and rebuilds
       - ./workdir:/app/workdir
       - ./logs:/app/logs
     restart: unless-stopped

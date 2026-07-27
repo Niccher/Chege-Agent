@@ -16,5 +16,6 @@ COPY webui/ ./webui/
 # Expose the API port
 EXPOSE 9100
 
-# Run the FastAPI server
-CMD ["python", "fast-api/main.py"]
+# Run FastAPI with hot-reload. --app-dir avoids the hyphen-in-module-name issue.
+CMD ["uvicorn", "main:app", "--app-dir", "/app/fast-api", "--host", "0.0.0.0", "--port", "9100", "--reload", "--reload-dir", "/app/fast-api", "--reload-dir", "/app/webui"]
+
