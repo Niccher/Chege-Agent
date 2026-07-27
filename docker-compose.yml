@@ -1,15 +1,15 @@
 version: '3.8'
 
 services:
-  coding-agent:
+  chege-agent:
     build: .
-    container_name: coding-agent
+    image: chege-agent
+    container_name: chege-agent
     ports:
-      - "8000:8000"
+      - "9100:9100"
     volumes:
       - ./workdir:/app/workdir
       - ./logs:/app/logs
     restart: unless-stopped
-    # Depending on the host OS, host.docker.internal allows the container to reach the host.
     extra_hosts:
       - "host.docker.internal:host-gateway"

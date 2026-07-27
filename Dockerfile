@@ -14,7 +14,7 @@ COPY fast-api/ ./fast-api/
 COPY webui/ ./webui/
 
 # Expose the API port
-EXPOSE 8000
+EXPOSE 9100
 
 # Run the FastAPI server
 CMD ["python", "fast-api/main.py"]
