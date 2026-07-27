@@ -412,7 +412,7 @@ async def update_config(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/config/test")
-async def test_ollama_connection(url: str):
+def test_ollama_connection(url: str):
     try:
         test_url = url.rstrip("/") + "/api/tags"
         req = urllib.request.Request(test_url, headers={"Accept": "application/json"})
@@ -426,7 +426,7 @@ async def test_ollama_connection(url: str):
         return {"status": "error", "message": f"❌ Unexpected error: {str(e)}"}
 
 @app.get("/config/detect-host")
-async def detect_host_ip():
+def detect_host_ip():
     try:
         candidates = []
         with open("/etc/hosts", "r") as f:
@@ -455,12 +455,12 @@ async def detect_host_ip():
         return {"status": "error", "message": str(e)}
 
 @app.get("/tools")
-async def get_tools():
+def get_tools():
     """Return all available tools with metadata."""
     return {"tools": [{"id": t["id"], "description": t["description"], "dangerous": t["dangerous"]} for t in ALL_TOOLS]}
 
 @app.get("/models")
-async def get_models():
+def get_models():
     try:
         client = get_ollama_client()
         response = client.list()
@@ -473,7 +473,7 @@ async def get_models():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/projects")
-async def list_projects():
+def list_projects():
     """List all project folders inside the workspace directory."""
     try:
         if not os.path.exists(WORKSPACE_BASE):
@@ -487,7 +487,7 @@ async def list_projects():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/projects/{project_name}")
-async def delete_project(project_name: str):
+def delete_project(project_name: str):
     """Delete the project's workspace folder and log files permanently."""
     import shutil
     try:
@@ -507,7 +507,7 @@ async def delete_project(project_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/files")
-async def list_files_api(project_name: str):
+def list_files_api(project_name: str):
     try:
         work_dir, _ = get_project_dirs(project_name)
         files = []
@@ -523,7 +523,7 @@ async def list_files_api(project_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/files/{filepath:path}")
-async def get_file(filepath: str, project_name: str):
+def get_file(filepath: str, project_name: str):
     try:
         work_dir, _ = get_project_dirs(project_name)
         full_path = os.path.abspath(os.path.join(work_dir, filepath))
@@ -540,7 +540,7 @@ async def get_file(filepath: str, project_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/diff")
-async def get_diff(project_name: str):
+def get_diff(project_name: str):
     try:
         work_dir, _ = get_project_dirs(project_name)
         subprocess.run(["git", "add", "."], cwd=work_dir, capture_output=True)
@@ -552,7 +552,7 @@ async def get_diff(project_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/commit")
-async def commit_changes(request: Request):
+def commit_changes(request: Request):
     try:
         data = await request.json()
         project_name = data.get("project_name")
@@ -564,7 +564,7 @@ async def commit_changes(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/history")
-async def get_history(project_name: str):
+def get_history(project_name: str):
     try:
         _, logs_dir = get_project_dirs(project_name)
         history_file = os.path.join(logs_dir, "chat_history.json")
@@ -577,7 +577,7 @@ async def get_history(project_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+def chat(request: ChatRequest):
     try:
         client = get_ollama_client()
         work_dir, logs_dir = get_project_dirs(request.project_name)
