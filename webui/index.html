@@ -103,6 +103,7 @@
                             <option value="default-project">default-project</option>
                         </select>
                         <button class="btn btn-success" type="button" id="newProjectBtn" title="Create New Project">＋</button>
+                        <button class="btn btn-outline-danger" type="button" id="deleteProjectBtn" title="Delete Active Project">🗑️</button>
                     </div>
                 </div>
 
@@ -412,7 +413,16 @@
                 select.append('<option>No models found.</option>');
             } else {
                 data.models.forEach(model => {
-                    select.append(`<option value="${model}">${model}</option>`);
+                    // Check if model name typically supports tool calling
+                    const name = model.toLowerCase();
+                    const canTool = name.includes('coder') ||
+                                    name.includes('llama3') ||
+                                    name.includes('qwen') ||
+                                    name.includes('mistral') ||
+                                    name.includes('gemma') ||
+                                    name.includes('command-r');
+                    const badge = canTool ? '🛠️ [Tool Capable]' : '📝 [No Tools]';
+                    select.append(`<option value="${model}">${model} (${badge})</option>`);
                 });
             }
         }).fail(function() {
@@ -522,6 +532,28 @@
 
         $('#projectSelect').on('change', function() {
             loadProjectState();
+        });
+
+        // Delete Active Project
+        $('#deleteProjectBtn').click(function() {
+            const project = getProject();
+            if (project === 'default-project') {
+                alert("The 'default-project' workspace cannot be deleted.");
+                return;
+            }
+            if (confirm(`Are you absolutely sure you want to delete the project '${project}'?\n\nThis will permanently delete all workspace files, metadata, and chat history. This action cannot be undone.`)) {
+                $.ajax({
+                    url: `${API_BASE}/projects/${project}`,
+                    type: 'DELETE',
+                    success: function(res) {
+                        alert(res.message || "Project deleted successfully.");
+                        loadProjectsList('default-project');
+                    },
+                    error: function(err) {
+                        alert("Error: " + (err.responseJSON?.detail || "Could not delete project."));
+                    }
+                });
+            }
         });
 
         // New Project Modal

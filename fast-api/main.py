@@ -486,6 +486,26 @@ async def list_projects():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/projects/{project_name}")
+async def delete_project(project_name: str):
+    """Delete the project's workspace folder and log files permanently."""
+    import shutil
+    try:
+        if not project_name or ".." in project_name or "/" in project_name or project_name == "default-project":
+            raise HTTPException(status_code=400, detail="Cannot delete this project")
+        
+        work_dir = os.path.join(WORKSPACE_BASE, project_name)
+        logs_dir = os.path.join(LOGS_BASE, project_name)
+        
+        if os.path.exists(work_dir):
+            shutil.rmtree(work_dir)
+        if os.path.exists(logs_dir):
+            shutil.rmtree(logs_dir)
+            
+        return {"status": "success", "message": f"Project '{project_name}' deleted successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/files")
 async def list_files_api(project_name: str):
     try:
