@@ -33,6 +33,21 @@
         .metric-badge .metric-value { font-weight: 700; color: #212529; }
         .message.agent pre { margin: 0; }
         .message.agent pre code.hljs { border-radius: 6px; font-size: 0.85rem; }
+        /* Tools panel */
+        .tool-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .tool-toggle-row:last-child { border-bottom: none; }
+        .tool-label { font-size: 0.8rem; color: #ced4da; }
+        .tool-label.dangerous { color: #fd7e14; }
+        .tool-label .tool-name { font-family: monospace; font-weight: 600; }
+        .form-check-input:checked { background-color: #198754; border-color: #198754; }
+        /* Tool call card */
+        .tool-call-card { background: #1e1e2e; border: 1px solid #3d3d5c; border-radius: 6px; margin: 6px 0; overflow: hidden; }
+        .tool-call-header { padding: 6px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+        .tool-call-header:hover { background: rgba(255,255,255,0.05); }
+        .tool-call-name { font-family: monospace; font-size: 0.82rem; color: #7dd3fc; font-weight: 600; }
+        .tool-call-args { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+        .tool-call-body { padding: 8px 12px; background: #13131f; border-top: 1px solid #3d3d5c; display: none; }
+        .tool-call-body pre { margin: 0; font-size: 0.75rem; color: #a3e635; white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -62,10 +77,19 @@
             </div>
             
             <hr>
-            
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0">🔧 Agent Tools</h6>
+                <button class="btn btn-sm btn-outline-secondary py-0" id="toggleAllToolsBtn">All On</button>
+            </div>
+            <div id="toolsList" style="max-height:180px;overflow-y:auto;">
+                <small class="text-muted">Loading tools...</small>
+            </div>
+
+            <hr>
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4>Workspace Files</h4>
-                <button class="btn btn-sm btn-outline-light" id="refreshFilesBtn">Refresh</button>
+                <h6 class="mb-0">📁 Workspace Files</h6>
+                <button class="btn btn-sm btn-outline-light" id="refreshFilesBtn">↻</button>
             </div>
             <ul class="list-unstyled" id="fileList">
                 <!-- Files will be populated here -->
@@ -258,6 +282,9 @@
         if (!metrics) return '';
         const m = metrics;
         const tps = m.tokens_per_sec > 0 ? `${m.tokens_per_sec} tok/s` : 'n/a';
+        const toolBadge = m.tool_iterations > 0
+            ? `<span class="metric-badge">🔧 <span class="metric-value">${m.tool_iterations}</span> tool call${m.tool_iterations > 1 ? 's' : ''}</span>`
+            : '';
         return `
         <div class="metrics-bar">
             <span class="metric-badge">⚡ <span class="metric-value">${tps}</span></span>
@@ -266,7 +293,37 @@
             <span class="metric-badge">⏱ <span class="metric-value">${m.total_time_s}s</span> total</span>
             <span class="metric-badge">🧠 <span class="metric-value">${m.eval_time_s}s</span> eval</span>
             ${m.load_time_s > 0.1 ? `<span class="metric-badge">📦 <span class="metric-value">${m.load_time_s}s</span> load</span>` : ''}
+            ${toolBadge}
         </div>`;
+    }
+
+    function buildToolCallCards(toolCallLog) {
+        if (!toolCallLog || toolCallLog.length === 0) return '';
+        const cards = toolCallLog.map((tc, i) => {
+            const argsStr = JSON.stringify(tc.args).slice(0, 120);
+            const id = `tc-${Date.now()}-${i}`;
+            return `
+            <div class="tool-call-card">
+                <div class="tool-call-header" onclick="document.getElementById('${id}').style.display = document.getElementById('${id}').style.display === 'block' ? 'none' : 'block'">
+                    <span>🔧</span>
+                    <span class="tool-call-name">${tc.tool}</span>
+                    <span class="tool-call-args">${argsStr}</span>
+                    <span style="margin-left:auto;font-size:0.7rem;color:#64748b;">▼ result</span>
+                </div>
+                <div class="tool-call-body" id="${id}">
+                    <pre>${tc.result}</pre>
+                </div>
+            </div>`;
+        }).join('');
+        return `<div class="mb-2">${cards}</div>`;
+    }
+
+    function getEnabledTools() {
+        const checked = [];
+        $('#toolsList input[type=checkbox]:checked').each(function() {
+            checked.push($(this).val());
+        });
+        return checked;
     }
 
     function getProject() {
@@ -427,7 +484,40 @@
             $('#testResult, #saveResult').addClass('d-none').text('');
         });
 
-        // Load History & Files when project changes
+        // Load tools into sidebar
+        function loadTools() {
+            $.get(`${API_BASE}/tools`, function(data) {
+                const list = $('#toolsList');
+                list.empty();
+                data.tools.forEach(tool => {
+                    const dangerClass = tool.dangerous ? 'dangerous' : '';
+                    const dangerBadge = tool.dangerous ? ' <span style="font-size:0.65rem;color:#fd7e14;">⚠ shell</span>' : '';
+                    // Enable all by default, disable run_command by default for safety
+                    const defaultOn = tool.id !== 'run_command';
+                    list.append(`
+                        <div class="tool-toggle-row">
+                            <span class="tool-label ${dangerClass}">
+                                <span class="tool-name">${tool.id}</span>${dangerBadge}<br>
+                                <span style="font-size:0.7rem;color:#6c757d">${tool.description}</span>
+                            </span>
+                            <div class="form-check form-switch ms-2">
+                                <input class="form-check-input" type="checkbox" value="${tool.id}"
+                                    id="tool-${tool.id}" ${defaultOn ? 'checked' : ''}>
+                            </div>
+                        </div>`);
+                });
+            });
+        }
+        loadTools();
+
+        // Toggle all tools on/off
+        let allOn = true;
+        $('#toggleAllToolsBtn').click(function() {
+            allOn = !allOn;
+            $('#toolsList input[type=checkbox]').prop('checked', allOn);
+            $(this).text(allOn ? 'All On' : 'All Off');
+        });
+
         function loadProjectState() {
             const project = getProject();
             
@@ -619,18 +709,22 @@
                 data: JSON.stringify({
                     model: model,
                     message: msg,
-                    project_name: project
+                    project_name: project,
+                    enabled_tools: getEnabledTools()
                 }),
                 success: function(response) {
                     $(`#${loadingId}`).remove();
-                    let replyHtml = renderMarkdown(response.reply);
+
+                    // Render tool call cards above the reply
+                    let html = buildToolCallCards(response.tool_call_log);
+                    html += renderMarkdown(response.reply);
 
                     if (response.saved_files && response.saved_files.length > 0) {
-                        replyHtml += '<hr><strong>📁 Files saved:</strong><ul>';
+                        html += '<hr><strong>📁 Files saved:</strong><ul>';
                         response.saved_files.forEach(f => {
-                            replyHtml += `<li><code>${f}</code></li>`;
+                            html += `<li><code>${f}</code></li>`;
                         });
-                        replyHtml += '</ul>';
+                        html += '</ul>';
 
                         $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
                             const list = $('#fileList');
@@ -643,9 +737,9 @@
                         });
                     }
 
-                    replyHtml += buildMetricsBar(response.metrics);
+                    html += buildMetricsBar(response.metrics);
 
-                    const msgEl = $(`<div class="message agent">${replyHtml}</div>`);
+                    const msgEl = $(`<div class="message agent">${html}</div>`);
                     // Apply highlight.js to any code blocks that marked missed
                     msgEl.find('pre code').each(function() {
                         hljs.highlightElement(this);
