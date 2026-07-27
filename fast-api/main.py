@@ -101,6 +101,49 @@ async def test_ollama_connection(url: str):
     except Exception as e:
         return {"status": "error", "message": f"❌ Unexpected error: {str(e)}"}
 
+@app.get("/config/detect-host")
+async def detect_host_ip():
+    """Detect the Docker host gateway IP by reading /etc/hosts."""
+    try:
+        candidates = []
+        # Read /etc/hosts for host.docker.internal or the gateway
+        with open("/etc/hosts", "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                if len(parts) >= 2:
+                    ip = parts[0]
+                    hostnames = parts[1:]
+                    if "host.docker.internal" in hostnames:
+                        candidates.insert(0, {"ip": ip, "label": "host.docker.internal"})
+                    elif "host-gateway" in hostnames:
+                        candidates.append({"ip": ip, "label": "host-gateway"})
+
+        # Fallback: try the default Docker bridge gateway
+        if not candidates:
+            result = subprocess.run(
+                ["ip", "route", "show", "default"],
+                capture_output=True, text=True
+            )
+            for part in result.stdout.split():
+                if part.count(".") == 3:
+                    candidates.append({"ip": part, "label": "default gateway"})
+                    break
+
+        if candidates:
+            best = candidates[0]
+            return {
+                "status": "ok",
+                "ip": best["ip"],
+                "label": best["label"],
+                "suggested_url": f"http://{best['ip']}:11434"
+            }
+        return {"status": "error", "message": "Could not auto-detect host IP."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.get("/models")
 async def get_models():
     try:
