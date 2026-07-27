@@ -58,7 +58,31 @@
         .tool-call-args { font-size: 0.75rem; color: #a6adc8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
         .tool-call-body { padding: 8px 12px; background: #11111b; border-top: 1px solid #313244; display: none; }
         .tool-call-body pre { margin: 0; font-size: 0.75rem; color: #a6e3a1; white-space: pre-wrap; }
-    </style>
+        /* Agent Thinking Animation */
+        .thinking-bubble { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
+        .thinking-title { font-size: 0.82rem; font-weight: 600; color: #89b4fa; display: flex; align-items: center; gap: 8px; }
+        .pulse-loader { display: flex; gap: 4px; }
+        .pulse-dot { width: 6px; height: 6px; background: #89b4fa; border-radius: 50%; animation: pulse-anim 1.4s infinite ease-in-out both; }
+        .pulse-dot:nth-child(1) { animation-delay: -0.32s; }
+        .pulse-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes pulse-anim {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+        .skeleton-lines { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+        .skeleton-line { height: 10px; background: #45475a; border-radius: 4px; animation: skeleton-shimmer 1.8s infinite ease-in-out; }
+        .skeleton-line.short { width: 55%; }
+        .skeleton-line.medium { width: 85%; }
+        .skeleton-line.long { width: 100%; }
+        @keyframes skeleton-shimmer {
+            0% { opacity: 0.3; }
+            50% { opacity: 0.8; }
+            100% { opacity: 0.3; }
+        }
+        .sidebar select.form-select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+            background-size: 12px 12px;
+        }
     </style>
 </head>
 <body>
@@ -662,7 +686,25 @@
             $('#chatInput').val('');
             
             const loadingId = 'loading-' + Date.now();
-            $('#chatHistory').append(`<div class="message agent" id="${loadingId}">Thinking...</div>`);
+            $('#chatHistory').append(`
+                <div class="message agent" id="${loadingId}">
+                    <div class="thinking-bubble">
+                        <div class="thinking-title">
+                            <span>🧠 Chege is thinking</span>
+                            <div class="pulse-loader">
+                                <div class="pulse-dot"></div>
+                                <div class="pulse-dot"></div>
+                                <div class="pulse-dot"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-lines">
+                            <div class="skeleton-line long"></div>
+                            <div class="skeleton-line medium"></div>
+                            <div class="skeleton-line short"></div>
+                        </div>
+                    </div>
+                </div>
+            `);
             scrollChat();
 
             $.ajax({
