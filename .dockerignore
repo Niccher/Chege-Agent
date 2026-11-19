@@ -21,12 +21,25 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
 
 # Runtime data, workspaces & secrets
 workdir/
 data/
 logs/
 scratch/
+*.log
+backup.sql
+*.pem
+*.key
+
+# Local models and partial downloads must never enter the build context
+.llamacpp/
+*.gguf
+*.part
 
 # Databases
 *.db

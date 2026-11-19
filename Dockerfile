@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend source code and webui
 COPY backend/ ./backend/
 COPY webui/ ./webui/
-COPY fast-api/ ./fast-api/
 
 # Create unprivileged user (SEC-04, ENG-04)
 RUN useradd -u 10001 -m -s /bin/bash chege && \

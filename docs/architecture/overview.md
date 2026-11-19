@@ -18,7 +18,7 @@ flowchart TB
         end
 
         subgraph CoreApp ["Core Application (chege-agent)"]
-            FastAPI["FastAPI ASGI Server (Python 3.12)\nUvicorn :9100"]
+            FastAPI["FastAPI ASGI Server (Python 3.12)\nUvicorn :8000"]
             AgentLoop["RunManager & LoopGuard\nMulti-step Iteration Controller"]
             ToolRegistry["Tool Registry\nFile, Exec, Git, Search Tools"]
             EventBus["EventManager\nIn-memory Queue + SSE Broadcaster"]
@@ -53,7 +53,7 @@ flowchart TB
 
 | Component | Directory | Runtime / Tech | Purpose |
 |---|---|---|---|
-| **API Routers** | `backend/app/api/` | FastAPI / Pydantic | Exposes REST endpoints for auth, projects, sessions, runs, files, and settings. |
+| **API Routers** | `backend/app/api/` | FastAPI / Pydantic | Exposes REST endpoints for projects, sessions, runs, files, settings, and providers. |
 | **Agent Engine** | `backend/app/agent/` | Python 3.12 | Orchestrates prompt assembly, loop guards, context pruning, and step checkpoints. |
 | **Tool Registry** | `backend/app/tools/` | Python 3.12 | Implements atomic file operations, bash command execution, git tracking, and file search. |
 | **Sandbox Subsystem** | `backend/app/sandbox/` | Docker API / Subprocess | Enforces process isolation for executing shell commands and user scripts. |

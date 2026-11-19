@@ -1,12 +1,11 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from backend.app.db.database import get_db_session
 from backend.app.db.models import Message, Project, Session as DBSession
-from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/sessions", tags=["sessions"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 class CreateSessionRequest(BaseModel):
@@ -37,8 +36,8 @@ def list_project_sessions(project_slug: str, db: Session = Depends(get_db_sessio
     return {"sessions": [s.model_dump() for s in sessions]}
 
 
-@router.post("")
-def create_session(request: CreateSessionRequest, db: Session = Depends(get_db_session)):
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_session(request: CreateSessionRequest, response: Response, db: Session = Depends(get_db_session)):
     project = db.exec(select(Project).where(Project.slug == request.project_slug)).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -47,6 +46,7 @@ def create_session(request: CreateSessionRequest, db: Session = Depends(get_db_s
     db.add(new_sess)
     db.commit()
     db.refresh(new_sess)
+    response.headers["Location"] = f"/api/v1/sessions/{new_sess.id}"
     return {"session": new_sess.model_dump()}
 
 
@@ -74,8 +74,10 @@ def get_session(session_id: str, db: Session = Depends(get_db_session)):
     }
 
 
-@router.post("/{session_id}/fork")
-def fork_session(session_id: str, request: ForkSessionRequest, db: Session = Depends(get_db_session)):
+@router.post("/{session_id}/fork", status_code=status.HTTP_201_CREATED)
+def fork_session(
+    session_id: str, request: ForkSessionRequest, response: Response, db: Session = Depends(get_db_session)
+):
     orig_session = db.get(DBSession, session_id)
     if not orig_session:
         raise HTTPException(status_code=404, detail="Original session not found")
@@ -115,6 +117,7 @@ def fork_session(session_id: str, request: ForkSessionRequest, db: Session = Dep
             break
 
     db.commit()
+    response.headers["Location"] = f"/api/v1/sessions/{new_session.id}"
     return {"forked_session": new_session.model_dump(), "messages_copied": copied_count}
 
 

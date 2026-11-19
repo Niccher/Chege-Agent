@@ -1,242 +1,110 @@
 # REST API & Event Contract Reference
 
-All endpoints are hosted at `http://127.0.0.1:8000`. Canonical versioned routes are located at `/api/v1/*` (with `/api/*` supported as backward-compatible aliases). Interactive Swagger UI is available at `/docs`, and the OpenAPI v1 schema is accessible at `/api/v1/openapi.json`.
+Base URL: `http://127.0.0.1:8000` (loopback only).
+
+**All API routes are versioned: `/api/v1/*` only.** There are no unversioned `/api/*` aliases. Swagger UI: `/docs`; OpenAPI JSON: `/api/v1/openapi.json`.
+
+No authentication, users, or tenants: any process that can reach the port has full access. Keep the Compose port bound to `127.0.0.1` and use an SSH tunnel for remote access.
+
+## Status code conventions
+
+| Situation | Code |
+|---|---|
+| Read / update succeeded | `200 OK` |
+| Resource created (`POST /projects`, `/sessions`, `/sessions/{id}/fork`) | `201 Created` + `Location` header |
+| Async work accepted (`POST /runs`) | `202 Accepted` + `Location` header |
+| Duplicate project slug | `409 Conflict` |
+| Path escapes workspace | `403 Forbidden` |
+| Invalid run state (e.g. stale approval) | `409 Conflict` |
+
+Errors use `{"detail": "..."}`.
 
 ---
 
-## 1. Authentication Endpoints (`/api/v1/auth`)
+## Health
 
-### `POST /api/v1/auth/login`
-Authenticates an operator and sets an `HttpOnly` session cookie (`chege_token`).
-- **Request Body**:
-  ```json
-  {
-    "token": "secret-auth-token"
-  }
-  ```
-- **Response** (200 OK):
-  ```json
-  {
-    "status": "authenticated"
-  }
-  ```
+- `GET /healthz` → `{"status":"ok","version":"0.2.0"}`
+- `GET /readyz` → `{"status":"ready"}`
 
-### `GET /api/v1/auth/status`
-Verifies whether the current request is authenticated.
-- **Headers**: `Authorization: Bearer <token>` or `X-Chege-Token: <token>`
-- **Response** (200 OK):
-  ```json
-  {
-    "status": "ok",
-    "authenticated": true
-  }
-  ```
+## Projects — `/api/v1/projects`
 
----
+| Method | Path | Response |
+|---|---|---|
+| GET | `/projects` | `{"projects": [...]}` |
+| POST | `/projects` | `201`, `Location: /api/v1/projects/{slug}`, `{"project": {...}, "default_session_id": "..."}` |
+| GET | `/projects/{slug}` | `{"project": {...}}` |
+| POST | `/projects/{slug}/brain` | `{"status":"ok","project":{...}}` |
 
-## 2. Projects Endpoints (`/api/v1/projects`)
+Create body: `{"name":"Demo","goal":"...","stack":"Python","notes":"..."}`.
+Brain body: `{"goal":"...","stack":"...","notes":"..."}`.
 
-### `GET /api/v1/projects`
-List all active projects.
+## Sessions — `/api/v1/sessions`
 
----
+| Method | Path | Response |
+|---|---|---|
+| GET | `/sessions/by-project/{slug}` | `{"sessions":[...]}` |
+| POST | `/sessions` | `201`, `Location: /api/v1/sessions/{id}`, `{"session":{...}}` |
+| GET | `/sessions/{id}` | `{"session":{...},"messages":[...],"todos":[...]}` |
+| POST | `/sessions/{id}/fork` | `201`, `Location: /api/v1/sessions/{id}`, `{"forked_session":{...},"messages_copied":n}` |
+| POST | `/sessions/{id}/todos` | `{"status":"ok"}` |
 
-## 3. Providers Endpoints (`/api/v1/providers`)
+Create body: `{"project_slug":"demo","title":"Main Thread"}`.
 
-### `GET /api/v1/providers`
-List available LLM inference backends, their target URLs, default ports, and active provider (`llama_cpp` vs `ollama`).
+## Runs — `/api/v1/runs`
 
-### `PUT /api/v1/providers/active`
-Switches the system's active default provider at runtime without container restart:
-```json
-{
-  "provider": "llama_cpp"
-}
-```
+| Method | Path | Response |
+|---|---|---|
+| POST | `/runs` | `202`, `Location: /api/v1/runs/{id}`, `{"run_id":"...","status":"started"}` |
+| GET | `/runs/{id}` | `{"run":{...},"tool_calls":[...]}` |
+| POST | `/runs/{id}/approvals` | `{"status":"resumed"}` |
+| POST | `/runs/{id}/cancel` | `{"status":"cancelled"\|"not_active"}` |
+| POST | `/runs/{id}/revert` | `{"status":"reverted","git_ref":"..."}` (requires an automatic checkpoint) |
+| GET | `/runs/{id}/events?after=0` | SSE stream |
 
-### `POST /api/v1/providers/test`
-Validates connectivity to a given provider endpoint:
-```json
-{
-  "provider": "llama_cpp",
-  "url": "http://host.docker.internal:8080/v1"
-}
-```
+Start body: `{"session_id":"...","prompt":"...","model":"qwen2.5-coder:latest","provider":"llama_cpp","policy_mode":"auto_edit","max_steps":50}`.
 
-### `GET /api/v1/providers/{provider_name}/models`
-Discovers models currently loaded or available on the specified provider.
+Approval body: `{"approvals":[{"id":"<ToolCall id>","action":"approve"\|"reject","arguments":{...}}],"model":"..."}`.
 
----
+`policy_mode` values: `ask_all`, `auto_edit` (default — ordinary writes and exact safe commands auto-approved; destructive writes always gated), `full_auto`.
 
-## 4. Sessions Endpoints (`/api/v1/sessions`)
+### SSE events
 
----
+`text/event-stream` frames of the form `id: <seq>`, `event: <type>`, `data: <json>`.
 
-## 5. Runs Endpoints (`/api/v1/runs`)
+| Event | Payload |
+|---|---|
+| `run.started` | `{"run_id","model"}` |
+| `message.delta` | `{"content"}` |
+| `thinking.delta` | `{"thinking"}` |
+| `tool.started` | `{"tool","arguments"}` |
+| `tool.completed` | `{"tool","result"}` (truncated) |
+| `tool.approval_required` | `{"pending":[...]}` |
+| `run.completed` | `{"status":"completed"\|"budget_limit"}` |
+| `run.failed` | `{"error"}` |
+| `run.cancelled` | `{"status":"cancelled"}` |
 
-### `POST /api/v1/runs`
-Launches an asynchronous agent execution run (HTTP 202 Accepted).
-```json
-{
-  "session_id": "session-uuid",
-  "prompt": "Build a REST API",
-  "model": "qwen2.5-coder:latest",
-  "provider": "llama_cpp"
-}
-```
+Reconnect with `?after=<last seq>`; the endpoint replays history before subscribing to live events.
 
-### `GET /api/v1/runs/{run_id}`
-Retrieves run metadata and associated tool call history.
+## Files — `/api/v1/files`
 
-### `POST /api/v1/runs/{run_id}/approvals`
-Submits user approval decisions for paused actions.
+| Method | Path | Query / body | Response |
+|---|---|---|---|
+| GET | `/files` | `project_slug`, `directory` (default `.`) | `{"files":[...]}` |
+| GET | `/files/content` | `project_slug`, `filepath` | `{"content":"...","filepath":"..."}` |
+| GET | `/files/diff` | `project_slug` | `{"diff":"..."}` |
+| POST | `/files/commit` | body `{"project_slug":"...","message":"..."}` | `{"status":"success","output":"..."}` |
 
-### `POST /api/v1/runs/{run_id}/cancel`
-Aborts an in-progress agent run.
+## Providers — `/api/v1/providers`
 
----
+`GET /providers` → `{"active_provider":"...","providers":[...]}`;
+`PUT /providers/active` body `{"provider":"llama_cpp"|"ollama"|"openai"}`;
+`POST /providers/test` body `{"provider":"...","url":"..."}`;
+`GET /providers/{provider_name}/models`.
 
-## 6. Real-Time Events (`/api/v1/runs/{run_id}/events`)
+## Tools — `/api/v1/tools`
 
-### `GET /api/v1/runs/{run_id}/events`
-Server-Sent Events (SSE) stream.
-- **Query Parameters**:
-  - `after` (optional, default `0`): Replay events strictly after this sequence number for reconnection catchup.
-- **Media Type**: `text/event-stream`
+`GET /tools` → `{"tools":[{"name":"...","description":"...","risk":"read"|"write"|"exec"|"network"}]}`.
 
----
+## Settings — `/api/v1/settings`
 
-## 7. Files Endpoints (`/api/v1/files/{project_slug}`)
-
-### `GET /api/v1/files/{project_slug}`
-Returns the hierarchical directory tree and file metadata of the workspace.
-
-### `GET /api/v1/files/{project_slug}/content?path=src/main.py`
-Retrieves line-numbered content of a specific file inside the workspace.
-
----
-
-## 8. Health & Settings Endpoints
-
-- `GET /healthz`: Service liveness check (`{"status": "ok", "version": "0.2.0"}`).
-- `GET /readyz`: Service readiness probe (`{"status": "ready"}`).
-- `GET /api/v1/settings`: Returns current runtime configurations and provider availability.
-- `PATCH /api/v1/settings`: Partial update for runtime settings (`llamacpp_url`, `ollama_url`, `default_provider`).
-
-- **Response** (200 OK):
-  ```json
-  [
-    {
-      "id": "e2c3664d-...",
-      "name": "E-Commerce Microservice",
-      "slug": "e-commerce-microservice",
-      "brain_goal": "Build an async order processing API",
-      "brain_stack": "FastAPI, PostgreSQL, Redis",
-      "created_at": "2026-11-19T06:00:00Z"
-    }
-  ]
-  ```
-
-### `POST /api/projects`
-Create a new project and initialize its workspace Git repository.
-- **Request Body**:
-  ```json
-  {
-    "name": "Weather CLI",
-    "slug": "weather-cli",
-    "brain_goal": "A CLI tool to fetch weather via Open-Meteo",
-    "brain_stack": "Python, Click, httpx"
-  }
-  ```
-- **Response** (201 Created): Returns the created Project object.
-
----
-
-## 3. Sessions Endpoints (`/api/sessions`)
-
-### `POST /api/sessions`
-Start a new chat session for a project.
-- **Request Body**:
-  ```json
-  {
-    "project_id": "e2c3664d-...",
-    "title": "Initial Setup and Scaffold"
-  }
-  ```
-
-### `GET /api/sessions/{session_id}`
-Retrieve a session, including its message history and todo checklist.
-
----
-
-## 4. Runs Endpoints (`/api/runs`)
-
-### `POST /api/runs`
-Initiates an autonomous agent execution step.
-- **Request Body**:
-  ```json
-  {
-    "session_id": "f5d1798e-...",
-    "prompt": "Create pyproject.toml and a health endpoint in main.py",
-    "model": "qwen2.5-coder:latest",
-    "policy_mode": "auto_edit",
-    "max_steps": 50
-  }
-  ```
-- **Policy Modes**:
-  - `ask_all`: Prompts user before every single tool execution.
-  - `auto_edit`: Automatically approves reads/searches, prompts for writes, deletes, and commands.
-  - `full_auto`: Runs all tools automatically without human intervention.
-- **Response** (200 OK):
-  ```json
-  {
-    "run_id": "42614b14-...",
-    "status": "running"
-  }
-  ```
-
-### `POST /api/runs/{run_id}/approvals`
-Submits human-in-the-loop decisions for pending tool calls.
-- **Request Body**:
-  ```json
-  {
-    "approvals": [
-      {
-        "id": "tool-call-uuid",
-        "action": "approve"
-      }
-    ],
-    "model": "qwen2.5-coder:latest"
-  }
-  ```
-
-### `POST /api/runs/{run_id}/cancel`
-Aborts an in-progress agent run.
-
----
-
-## 5. Real-Time Events (`/api/runs/{run_id}/events`)
-
-### `GET /api/runs/{run_id}/events`
-Server-Sent Events (SSE) stream.
-- **Query Parameters**:
-  - `after` (optional, default `0`): Replay events strictly after this sequence number for reconnection catchup.
-- **Media Type**: `text/event-stream`
-
----
-
-## 6. Files Endpoints (`/api/files/{project_slug}`)
-
-### `GET /api/files/{project_slug}`
-Returns the hierarchical directory tree and file metadata of the workspace.
-
-### `GET /api/files/{project_slug}/content?path=src/main.py`
-Retrieves line-numbered content of a specific file inside the workspace.
-
----
-
-## 7. Health & Settings Endpoints
-
-- `GET /healthz`: Service liveness check (`{"status": "ok", "version": "0.2.0"}`).
-- `GET /readyz`: Service readiness probe (`{"status": "ready"}`).
-- `GET /api/settings`: Returns current runtime configurations and provider availability.
+`GET /settings` returns masked settings; `PATCH /settings` updates `llamacpp_url`, `ollama_url`, `default_provider`, `openai_base_url`, `openai_api_key`, `sandbox_backend`. `POST /settings` is intentionally not exposed.

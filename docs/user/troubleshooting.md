@@ -31,19 +31,19 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 
 ---
 
-## 2. Port 9100 Already Allocated
+## 2. Port 8000 Already Allocated
 
 ### Symptom:
 Docker Compose fails with:
 ```text
-Error response from daemon: driver failed programming external connectivity on endpoint chege-agent: Bind for 127.0.0.1:9100 failed: port is already allocated
+Error response from daemon: driver failed programming external connectivity on endpoint chege-agent: Bind for 127.0.0.1:8000 failed: port is already allocated
 ```
 
 ### Solution:
 Identify the conflicting process or change Chege Agent's external port:
 ```bash
-# Check what is listening on 9100
-sudo lsof -i :9100
+# Check what is listening on 8000
+sudo lsof -i :8000
 # Alternatively, change host port in .env
 CHEGE_PORT=9200
 ```
@@ -63,12 +63,14 @@ chege-docker-proxy | Permission denied: /var/run/docker.sock
 ```
 
 ### Solution:
-Ensure the user running Docker has read/write permissions to `/var/run/docker.sock` on the host, or verify that the daemon is active:
+Ensure the host user is in the `docker` group and the daemon is active. Do **not** loosen socket permissions with `chmod 666`/`chmod 777`.
+
 ```bash
-sudo chmod 666 /var/run/docker.sock
-# Or add your user to the docker group
-sudo usermod -aG docker $USER
+sudo usermod -aG docker $USER   # log out and back in
+bash scripts/deploy.sh logs docker-socket-proxy
 ```
+
+If the proxy is reachable but runs fail with a sandbox error, rebuild the sandbox image with `bash scripts/deploy.sh` or inspect `bash scripts/deploy.sh logs chege-agent`.
 
 ---
 

@@ -12,11 +12,13 @@ tests/
 │   ├── test_loop_guard.py         # Tests loop repetition & stalled step detection
 │   ├── test_security_paths.py     # Tests path canonicalization and directory traversal defense
 │   ├── test_security_scrubber.py  # Tests redaction of secrets and credentials
+│   ├── test_sandbox_docker.py     # Tests cwd mapping and fail-loud proxy behavior
 │   └── test_tools.py              # Tests file, git, search, and exec tool implementations
 └── integration/
     ├── test_agent_loop.py         # Tests multi-step agent flow with mock LLM responses
-    ├── test_api_endpoints.py      # Tests FastAPI route status codes and auth enforcement
-    └── test_e2e_simulation.py     # End-to-end simulated run with tool approval
+    ├── test_api_endpoints.py      # Tests v1 route status codes and local API access
+    ├── test_e2e_simulation.py     # End-to-end simulated run with tool approval
+    └── test_v1_api.py             # Asserts no legacy /api aliases remain
 ```
 
 ---

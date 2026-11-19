@@ -1,0 +1,12 @@
+# Isolated local deployment overlay — used only by `deploy.sh --isolated`.
+#
+# Combined with COMPOSE_PROJECT_NAME=chege-local, this guarantees a completely
+# separate Compose project with unique container and network names, so an
+# existing `chegeagent` stack (e.g. the legacy `chege-agent` / `coding-agent`
+# containers) is never stopped, recreated, or removed as an "orphan".
+services:
+  docker-socket-proxy:
+    container_name: chege-local-proxy
+
+  chege-agent:
+    container_name: chege-local-agent

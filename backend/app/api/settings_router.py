@@ -1,12 +1,22 @@
+from urllib.parse import urlparse
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
 from backend.app.core.config import Settings, get_settings
 from backend.app.providers.factory import get_provider
 from backend.app.providers.llama_cpp import LlamaCppProvider
-from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/settings", tags=["settings"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/settings", tags=["settings"])
+
+PROVIDERS = {"llama_cpp", "ollama", "openai"}
+SANDBOX_BACKENDS = {"docker", "local"}
+POSITIVE_INTS = {
+    "default_context_window": 1024,
+    "max_steps": 1,
+    "run_timeout_seconds": 10,
+}
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -16,6 +26,66 @@ class UpdateSettingsRequest(BaseModel):
     openai_base_url: str | None = None
     openai_api_key: str | None = None
     sandbox_backend: str | None = None
+    default_context_window: int | None = None
+    max_steps: int | None = None
+    run_timeout_seconds: int | None = None
+    llamacpp_model: str | None = None
+    ollama_model: str | None = None
+
+
+def _http_url(value: object, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise HTTPException(400, detail=f"{name} must be a non-empty URL")
+    url = value.strip()
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme not in ("http", "https") or not hostname:
+        raise HTTPException(400, detail=f"{name} must begin with http:// or https://")
+    if hostname in ("169.254.169.254", "metadata.google.internal"):
+        raise HTTPException(400, detail="Cloud metadata URLs are not allowed")
+    return url
+
+
+def _validated_updates(request: UpdateSettingsRequest) -> dict:
+    raw = request.model_dump(exclude_unset=True)
+    updates = {}
+    for key, value in raw.items():
+        # An explicit empty API key clears the stored credential.
+        if key == "openai_api_key":
+            if value is None:
+                continue
+            updates[key] = value.strip() or None
+        elif key in ("llamacpp_model", "ollama_model"):
+            if value is not None:
+                value = value.strip()
+                # Reject control characters and path traversal in model names.
+                if not value or any(c in value for c in ("\n", "\r", "\0", "..")):
+                    raise HTTPException(400, detail=f"{key} is not a valid model name or path")
+                updates[key] = value
+        elif value is not None:
+            updates[key] = value
+
+    for key in ("llamacpp_url", "ollama_url", "openai_base_url"):
+        if key in updates:
+            updates[key] = _http_url(updates[key], key)
+
+    if "default_provider" in updates:
+        if updates["default_provider"] not in PROVIDERS:
+            raise HTTPException(400, detail="default_provider must be llama_cpp, ollama or openai")
+    if "sandbox_backend" in updates:
+        if updates["sandbox_backend"] not in SANDBOX_BACKENDS:
+            raise HTTPException(400, detail="sandbox_backend must be docker or local")
+    for key, minimum in POSITIVE_INTS.items():
+        if key in updates:
+            value = updates[key]
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise HTTPException(400, detail=f"{key} must be an integer >= {minimum}")
+    return updates
+
+
+def _apply_updates(updates: dict, settings: Settings) -> None:
+    for key, value in updates.items():
+        setattr(settings, key, value)
 
 
 @router.get("")
@@ -23,23 +93,37 @@ def read_settings(settings: Settings = Depends(get_settings)):
     return settings.get_masked_settings()
 
 
-@router.post("")
 @router.patch("")
 def update_settings(request: UpdateSettingsRequest, settings: Settings = Depends(get_settings)):
-    if request.llamacpp_url is not None:
-        settings.llamacpp_url = request.llamacpp_url
-    if request.ollama_url is not None:
-        settings.ollama_url = request.ollama_url
-    if request.default_provider is not None:
-        settings.default_provider = request.default_provider
-    if request.openai_base_url is not None:
-        settings.openai_base_url = request.openai_base_url
-    if request.openai_api_key is not None:
-        settings.openai_api_key = request.openai_api_key
-    if request.sandbox_backend is not None:
-        settings.sandbox_backend = request.sandbox_backend
-
+    """Apply settings to the running process only (restart clears them)."""
+    updates = _validated_updates(request)
+    _apply_updates(updates, settings)
     return {"status": "success", "settings": settings.get_masked_settings()}
+
+
+@router.put("/defaults")
+def save_default_settings(request: UpdateSettingsRequest, settings: Settings = Depends(get_settings)):
+    """Apply settings and persist them as defaults in the data volume."""
+    updates = _validated_updates(request)
+    _apply_updates(updates, settings)
+    path = settings.save_settings(updates)
+    return {
+        "status": "success",
+        "settings": settings.get_masked_settings(),
+        "saved_to": path.relative_to(settings.data_dir).as_posix(),
+    }
+
+
+@router.delete("/defaults")
+def clear_default_settings(settings: Settings = Depends(get_settings)):
+    """Delete saved defaults. Runtime values stay until the next restart."""
+    removed = settings.clear_saved_settings()
+    return {
+        "status": "success",
+        "removed": removed,
+        "message": "Saved defaults cleared; restart to return to env/.env values." if removed
+        else "No saved defaults were present.",
+    }
 
 
 @router.get("/models")
@@ -64,7 +148,6 @@ async def test_ollama(url: str | None = None, settings: Settings = Depends(get_s
     if not raw_url.startswith(("http://", "https://")):
         return {"status": "error", "message": "URL must begin with http:// or https://"}
 
-    from urllib.parse import urlparse
     hostname = (urlparse(raw_url).hostname or "").lower()
     if hostname in ("169.254.169.254", "metadata.google.internal"):
         return {"status": "error", "message": "Access to cloud metadata IP is prohibited"}

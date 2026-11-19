@@ -8,8 +8,8 @@ This document details how the Web UI, FastAPI backend, LLM providers, and backgr
 
 | Source | Destination | Transport | Auth | Default Endpoint | Notes |
 |---|---|---|---|---|---|
-| **Web UI** | FastAPI API | HTTP REST | Cookie `chege_token` / Bearer | `http://127.0.0.1:9100/api` | JSON request/response models |
-| **Web UI** | FastAPI SSE | HTTP EventSource | Cookie or `?token=<token>` | `http://127.0.0.1:9100/api/runs/{id}/events` | Real-time token streaming and step events |
+| **Web UI** | FastAPI API | HTTP REST | None (local-only) | `http://127.0.0.1:8000/api/v1` | JSON request/response models; no legacy aliases |
+| **Web UI** | FastAPI SSE | HTTP EventSource | None (local-only) | `http://127.0.0.1:8000/api/v1/runs/{id}/events` | Real-time token streaming and step events |
 | **FastAPI** | Ollama | HTTP REST | None (Internal network) | `http://host.docker.internal:11434` | Chat completions with tool calling |
 | **FastAPI** | OpenAI | HTTPS REST | `Authorization: Bearer <key>` | `https://api.openai.com/v1` | OpenAI API compatible completion endpoint |
 | **FastAPI** | Docker Proxy | HTTP REST | None (Private network) | `tcp://docker-socket-proxy:2375` | Container lifecycle and exec API |
@@ -27,11 +27,11 @@ sequenceDiagram
     participant LLM as Ollama / OpenAI
     participant Sandbox as Docker Sandbox
 
-    User->>API: POST /api/runs (prompt, session_id, policy_mode)
+    User->>API: POST /api/v1/runs (prompt, session_id, policy_mode)
     API->>DB: Create Run (status: running)
     API-->>User: 200 OK (run_id)
 
-    User->>API: GET /api/runs/{run_id}/events (SSE)
+    User->>API: GET /api/v1/runs/{run_id}/events (SSE)
     
     loop Agent Step Iteration (up to max_steps)
         API->>LLM: POST /chat (messages, tools, context)
@@ -44,7 +44,7 @@ sequenceDiagram
             alt Policy requires Approval
                 API->>DB: Store ToolCall (status: pending)
                 API-->>User: SSE event: run.approval_required (tool_call_id, args)
-                User->>API: POST /api/runs/{run_id}/approvals (approve / reject)
+                User->>API: POST /api/v1/runs/{run_id}/approvals (approve / reject)
             end
             
             API->>Sandbox: Execute Tool (write_file / run_command)
@@ -63,7 +63,7 @@ sequenceDiagram
 
 ## 3. Real-Time Server-Sent Events (SSE) Contract
 
-Endpoint: `GET /api/runs/{run_id}/events`
+Endpoint: `GET /api/v1/runs/{run_id}/events`
 
 Clients connect using standard `EventSource`. Query parameter `?after=<seq>` enables catchup of missed events after reconnecting.
 

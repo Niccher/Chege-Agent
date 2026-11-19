@@ -90,8 +90,6 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
     workdir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
     monkeypatch.setattr(settings, "workdir", workdir)
-    monkeypatch.setattr(settings, "auth_enabled", True)
-    monkeypatch.setattr(settings, "auth_token", "e2e-simulation-secret")
 
     # Wire run manager with scripted realistic provider
     scripted_provider = ScriptedE2EProvider()
@@ -105,15 +103,12 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
     app.dependency_overrides[runs_router.get_run_manager] = lambda: run_mgr
 
     with TestClient(app) as client:
-        headers = {"Authorization": "Bearer e2e-simulation-secret"}
-
         # 1. Create project
         resp = client.post(
-            "/api/projects",
-            headers=headers,
+            "/api/v1/projects",
             json={"name": "End2End Sim Project", "goal": "Verify all harness features", "stack": "Python"},
         )
-        assert resp.status_code == 200, resp.text
+        assert resp.status_code == 201, resp.text
         proj_data = resp.json()
         slug = proj_data["project"]["slug"]
         default_session_id = proj_data["default_session_id"]
@@ -129,8 +124,7 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
 
         # 2. Query project brain and update it
         brain_resp = client.post(
-            f"/api/projects/{slug}/brain",
-            headers=headers,
+            f"/api/v1/projects/{slug}/brain",
             json={"goal": "Updated Goal", "stack": "FastAPI", "notes": "No notes"},
         )
         assert brain_resp.status_code == 200
@@ -138,8 +132,7 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
 
         # 3. Start a Run in auto_edit mode (will pause when run_command is proposed)
         start_resp = client.post(
-            "/api/runs",
-            headers=headers,
+            "/api/v1/runs",
             json={
                 "session_id": default_session_id,
                 "prompt": "Build and run the calculator",
@@ -148,7 +141,8 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
                 "max_steps": 10,
             },
         )
-        assert start_resp.status_code == 200
+        assert start_resp.status_code == 202
+        assert start_resp.headers["location"] == f"/api/v1/runs/{start_resp.json()['run_id']}"
         run_id = start_resp.json()["run_id"]
 
         # Wait for agent loop to pause on approval
@@ -156,7 +150,7 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
         paused = False
         for _ in range(50):
             time.sleep(0.05)
-            r_info = client.get(f"/api/runs/{run_id}", headers=headers).json()
+            r_info = client.get(f"/api/v1/runs/{run_id}").json()
             if r_info["run"]["status"] == "awaiting_approval":
                 paused = True
                 break
@@ -173,8 +167,7 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
 
         # 4. Submit approval
         appr_resp = client.post(
-            f"/api/runs/{run_id}/approvals",
-            headers=headers,
+            f"/api/v1/runs/{run_id}/approvals",
             json={
                 "model": "qwen2.5-coder",
                 "approvals": [{"id": pending_tc["id"], "action": "approve"}],
@@ -187,14 +180,14 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
         completed = False
         for _ in range(50):
             time.sleep(0.05)
-            r_info = client.get(f"/api/runs/{run_id}", headers=headers).json()
+            r_info = client.get(f"/api/v1/runs/{run_id}").json()
             if r_info["run"]["status"] == "completed":
                 completed = True
                 break
         assert completed, f"Run did not complete. State: {r_info}"
 
         # 5. Check SSE events catchup (?after=0)
-        events_resp = client.get(f"/api/runs/{run_id}/events?after=0", headers=headers)
+        events_resp = client.get(f"/api/v1/runs/{run_id}/events?after=0")
         assert events_resp.status_code == 200
         events_text = events_resp.text
         assert "event: run.started" in events_text
@@ -202,17 +195,17 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
         assert "event: run.completed" in events_text
 
         # 6. Check files API
-        files_resp = client.get(f"/api/files?project_slug={slug}", headers=headers)
+        files_resp = client.get(f"/api/v1/files?project_slug={slug}")
         assert files_resp.status_code == 200
         file_list = files_resp.json()["files"]
         assert "calc.py" in file_list
 
-        content_resp = client.get(f"/api/files/content?project_slug={slug}&filepath=calc.py", headers=headers)
+        content_resp = client.get(f"/api/v1/files/content?project_slug={slug}&filepath=calc.py")
         assert content_resp.status_code == 200
         assert "def add(a, b):" in content_resp.json()["content"]
 
         # 7. Check session messages and history
-        sess_resp = client.get(f"/api/sessions/{default_session_id}", headers=headers)
+        sess_resp = client.get(f"/api/v1/sessions/{default_session_id}")
         assert sess_resp.status_code == 200
         messages = sess_resp.json()["messages"]
         # Should have user prompt, assistant proposal, tool output, etc.

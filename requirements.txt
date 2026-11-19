@@ -8,3 +8,5 @@ ollama>=0.3.0
 structlog>=24.4.0
 pathspec>=0.12.0
 mcp>=1.0.0
+psycopg[binary]>=3.2.0
+docker>=7.1.0

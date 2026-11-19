@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/assets/chege.svg">
+  <link rel="alternate icon" href="/assets/chege.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/chege-192.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('lte-theme') || 'light';
+        if (t === 'auto') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        t = t === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <title>Setup &amp; config — Chege Agent</title>
+  <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
+  <link rel="stylesheet" href="/assets/vendor/all.min.css">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="hold-transition layout-fixed fixed-header sidebar-expand-lg">
+<div class="app-wrapper">
+  <div id="chege-navbar"></div><div id="chege-sidebar"></div>
+  <main class="app-main">
+    <section class="app-content-header"><div class="container-fluid">
+      <h1 class="m-0">Setup &amp; configuration</h1>
+      <p class="text-muted mb-0">One command on a fresh instance; sane defaults for a personal app.</p>
+    </div></section>
+    <section class="app-content"><div class="container-fluid">
+      <div class="callout callout-info mb-4">
+        Looking to change defaults? Use the <a href="/settings"><b>Settings console</b></a> for providers, sandbox,
+        agent limits and theme. This page is the deployment guide and <code>.env</code> reference.
+      </div>
+      <div class="card card-outline card-primary"><div class="card-header"><h3 class="card-title">Deploy</h3></div>
+        <div class="card-body">
+          <pre class="doc-code"><code>git clone &lt;your-repo-url&gt; &amp;&amp; cd "Chege Agent"
+bash scripts/deploy.sh                 # DEFAULT: Docker + llama.cpp precompiled + SQLite
+bash scripts/deploy.sh --with-postgres # internal Postgres container
+bash scripts/deploy.sh --with-ollama   # switch provider to host Ollama on :11434
+bash scripts/deploy.sh --isolated      # separate stack; never touches existing containers
+bash scripts/deploy.sh doctor          # preflight diagnostics
+bash scripts/deploy.sh logs chege-agent</code></pre>
+          <p class="text-muted mt-2 mb-0">The script syncs <code>.env</code>, validates compose, builds, waits for health,
+            and prints loopback URLs plus SSH-tunnel instructions. It never publishes the API to <code>0.0.0.0</code>.</p>
+          <p class="text-muted mb-0">Other Docker stacks already running? Set <code>CHEGE_PORT</code> to a free port in
+            <code>.env</code> and use <code>--isolated</code>: unique container names and a private network, with no
+            orphan removal of existing apps.</p>
+        </div>
+      </div>
+
+      <div class="row mt-4">
+        <div class="col-lg-6">
+          <div class="card card-outline card-info h-100"><div class="card-header"><h3 class="card-title">Key settings (.env)</h3></div>
+            <div class="card-body p-0"><table class="table table-sm m-0">
+              <thead><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr></thead>
+              <tbody>
+                <tr><td><code>CHEGE_HOST</code></td><td><code>127.0.0.1</code></td><td>Loopback binding. Keep it.</td></tr>
+                <tr><td><code>CHEGE_PORT</code></td><td><code>8000</code></td><td>Host port.</td></tr>
+                <tr><td><code>CHEGE_SANDBOX_BACKEND</code></td><td><code>docker</code></td><td><code>docker</code> or <code>local</code> (explicit opt-in).</td></tr>
+                <tr><td><code>CHEGE_DATABASE_URL</code></td><td>empty</td><td>Empty = SQLite; set by the Postgres overlay.</td></tr>
+                <tr><td><code>POSTGRES_PASSWORD</code></td><td>generated</td><td>Internal DB password, stored only in <code>.env</code>.</td></tr>
+                <tr><td><code>CHEGE_DEFAULT_PROVIDER</code></td><td><code>llama_cpp</code></td><td><code>llama_cpp</code>, <code>ollama</code> or <code>openai</code>.</td></tr>
+                <tr><td><code>CHEGE_LLAMACPP_URL</code></td><td><code>:8080/v1</code></td><td>Host llama.cpp endpoint.</td></tr>
+                <tr><td><code>CHEGE_OLLAMA_URL</code></td><td><code>:11434</code></td><td>Host Ollama endpoint.</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card card-outline card-success h-100"><div class="card-header"><h3 class="card-title">Providers</h3></div>
+            <div class="card-body">
+              <p><b>llama.cpp (default):</b> run a local server on port 8080 and point <code>CHEGE_LLAMACPP_URL</code> at
+                <code>http://host.docker.internal:8080/v1</code>.</p>
+              <p><b>Ollama:</b> <code>ollama serve</code> on the host; URL <code>http://host.docker.internal:11434</code>.</p>
+              <p><b>OpenAI-compatible:</b> set <code>CHEGE_OPENAI_BASE_URL</code> and <code>CHEGE_OPENAI_API_KEY</code>.</p>
+              <p class="mb-0 text-muted">Switch providers live from the playground or with
+                <code>PUT /api/v1/providers/active</code>.</p>
+            </div>
+          </div>
+          <div class="card card-outline card-warning mt-4"><div class="card-header"><h3 class="card-title">Database choices</h3></div>
+            <div class="card-body">
+              <p class="mb-2"><b>SQLite (default)</b> is an embedded file at <code>data/chege.db</code> — zero ops, ideal for one person.
+                Back it up by stopping the stack and copying the <code>data/</code> directory.</p>
+              <p class="mb-0"><b>Postgres</b> runs as an internal container with a named volume and a healthcheck; port 5432 is
+                never published. Back it up with <code>docker compose exec postgres pg_dump -U chege chege &gt; backup.sql</code>
+                (add both compose files when using the overlay).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-4"><div class="card-header"><h3 class="card-title">Remote access &amp; native development</h3></div>
+        <div class="card-body">
+          <p>There is <b>no in-app authentication</b>. To use the agent from another machine, keep the loopback binding and open an SSH tunnel:</p>
+          <pre class="doc-code"><code>ssh -N -L 8000:127.0.0.1:8000 user@your-instance
+# then browse http://127.0.0.1:8000/ on your laptop</code></pre>
+          <p class="mb-0">For native development without Docker, use <code>CHEGE_SANDBOX_BACKEND=local</code> and
+            <code>uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload</code>. The API docs live at
+            <a href="/docs">/docs</a> and the OpenAPI JSON at <code>/api/v1/openapi.json</code>.</p>
+        </div>
+      </div>
+    </div></section>
+  </main>
+  <div id="chege-footer"></div>
+</div>
+<script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+<script src="/assets/vendor/adminlte.min.js"></script>
+<script src="/assets/app.js"></script>
+<script>Chege.shell('/setup');</script>
+</body>
+</html>

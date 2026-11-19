@@ -6,10 +6,9 @@ from sqlmodel import Session, select
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.database import get_db_session
 from backend.app.db.models import Project
-from backend.app.security.auth import verify_auth_token
 from backend.app.security.paths import resolve_in
 
-router = APIRouter(prefix="/files", tags=["files"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/files", tags=["files"])
 
 
 class CommitRequest(BaseModel):

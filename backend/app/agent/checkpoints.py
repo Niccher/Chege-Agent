@@ -58,8 +58,27 @@ class CheckpointManager:
 
     @staticmethod
     def revert_run(workspace_root: Path, git_ref: str) -> bool:
-        """Revert workspace to checkpoint commit."""
+        """Revert workspace to checkpoint commit.
+
+        Dirty work is first pushed to a safety stash so a revert never destroys
+        unrelated uncommitted changes.
+        """
         try:
+            status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=workspace_root,
+                capture_output=True,
+                text=True,
+            )
+            if status.returncode == 0 and status.stdout.strip():
+                subprocess.run(
+                    ["git", "stash", "push", "--include-untracked", "-m", "chege-pre-revert-safety"],
+                    cwd=workspace_root,
+                    capture_output=True,
+                    text=True,
+                )
+                logger.info("Saved dirty workspace to a safety stash before revert.")
+
             res = subprocess.run(
                 ["git", "reset", "--hard", git_ref],
                 cwd=workspace_root,

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/assets/chege.svg">
+  <link rel="alternate icon" href="/assets/chege.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/chege-192.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('lte-theme') || 'light';
+        if (t === 'auto') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        t = t === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <title>Models — Chege Agent</title>
+  <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
+  <link rel="stylesheet" href="/assets/vendor/all.min.css">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="hold-transition layout-fixed fixed-header sidebar-expand-lg">
+<div class="app-wrapper">
+  <div id="chege-navbar"></div><div id="chege-sidebar"></div>
+  <main class="app-main">
+    <section class="app-content-header"><div class="container-fluid">
+      <h1 class="m-0">Models</h1>
+      <p class="text-muted mb-0">Download local models, choose what the agent uses, and switch at any time.</p>
+    </div></section>
+
+    <section class="app-content"><div class="container-fluid">
+      <div id="chege-alerts"></div>
+
+      <div class="chege-status-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+          <span class="chege-badge"><i class="fas fa-brain"></i> Local model manager</span>
+          <h2 class="mt-3 mb-1" id="models-summary">Loading installed models…</h2>
+          <p id="models-detail">Checking llama.cpp and Ollama endpoints.</p>
+        </div>
+        <div class="text-end">
+          <div class="small" id="models-updated">—</div>
+          <button id="refresh-models" class="btn btn-sm btn-light mt-2"><i class="fas fa-rotate"></i> Refresh</button>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="chege-settings-card h-100">
+            <div class="card-header">
+              <h3 class="mb-0"><i class="fas fa-microchip chege-section-icon"></i>llama.cpp (GGUF)</h3>
+              <span class="chege-status-badge" id="llamacpp-state">—</span>
+            </div>
+            <div class="card-body">
+              <p class="chege-model-help">GGUF files live on the host and are served by <code>llama-server</code>. Selecting a model restarts it to load your choice.</p>
+              <div id="llamacpp-models"><div class="text-muted small">Loading…</div></div>
+              <hr>
+              <label class="form-label" for="gguf-url">Download a GGUF model</label>
+              <div class="input-group input-group-sm">
+                <input id="gguf-url" class="form-control" placeholder="https://huggingface.co/.../model.gguf">
+                <button id="gguf-download" class="btn btn-primary" type="button"><i class="fas fa-download"></i> Download</button>
+              </div>
+              <span class="chege-setting-help">Paste a direct <code>.gguf</code> URL (e.g. a Hugging Face <code>resolve/main</code> link). Large files may take several minutes.</span>
+              <div class="chege-progress mt-3"><div class="chege-progress-bar" id="gguf-progress-bar"></div></div>
+              <div class="chege-progress-label" id="gguf-progress">Ready.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="chege-settings-card h-100">
+            <div class="card-header">
+              <h3 class="mb-0"><i class="fas fa-layer-group chege-section-icon"></i>Ollama</h3>
+              <span class="chege-status-badge" id="ollama-state">—</span>
+            </div>
+            <div class="card-body">
+              <p class="chege-model-help">Models installed in the Ollama daemon on the host. Pull a new one by its model tag.</p>
+              <div id="ollama-models"><div class="text-muted small">Loading…</div></div>
+              <hr>
+              <label class="form-label" for="ollama-tag">Pull an Ollama model</label>
+              <div class="input-group input-group-sm">
+                <input id="ollama-tag" class="form-control" placeholder="qwen2.5:1.5b">
+                <button id="ollama-pull" class="btn btn-primary" type="button"><i class="fas fa-download"></i> Pull</button>
+              </div>
+              <span class="chege-setting-help">Use a valid Ollama tag such as <code>llama3.2:3b</code> or <code>qwen2.5:7b-instruct</code>.</span>
+              <div class="chege-progress mt-3"><div class="chege-progress-bar" id="ollama-progress-bar"></div></div>
+              <div class="chege-progress-label" id="ollama-progress">Ready.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chege-settings-card mt-3">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-circle-info chege-section-icon"></i>How selection works</h3>
+          <span class="chege-status-badge">Applies to new runs</span>
+        </div>
+        <div class="card-body">
+          <p class="mb-2">Your selection is saved immediately to <code>data/settings.json</code> and used for every new run — no extra save step needed.</p>
+          <ul class="mb-0 ps-3">
+            <li><b>llama.cpp:</b> choosing a model restarts <code>llama-server</code> on the host, then the new model is used immediately.</li>
+            <li><b>Ollama:</b> choosing a model tag is instant — Ollama switches per request.</li>
+            <li>You can still override the model per run in the Playground's <code>model</code> selector.</li>
+            <li>Other defaults (provider URLs, sandbox, context size) are managed in the <a href="/settings">Settings console</a>.</li>
+          </ul>
+        </div>
+      </div>
+    </div></section>
+  </main>
+  <div id="chege-footer"></div>
+</div>
+
+<script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+<script src="/assets/vendor/adminlte.min.js"></script>
+<script src="/assets/app.js"></script>
+<script src="/assets/js/models.js"></script>
+</body>
+</html>

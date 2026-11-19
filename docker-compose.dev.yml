@@ -1,18 +1,18 @@
-version: '3.8'
-
 services:
   chege-agent:
     build: .
     image: chege-agent:dev
     container_name: chege-agent-dev
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${CHEGE_PORT:-8000}:8000"
     environment:
       - CHEGE_HOST=0.0.0.0
       - CHEGE_PORT=8000
       - CHEGE_DATA_DIR=/app/data
       - CHEGE_WORKDIR=/app/workdir
       - CHEGE_LOGS_DIR=/app/logs
+      - CHEGE_DATABASE_URL=${CHEGE_DATABASE_URL:-}
+      # Native dev is explicit no-isolation mode.
       - CHEGE_SANDBOX_BACKEND=local
       - CHEGE_DEFAULT_PROVIDER=llama_cpp
       - CHEGE_LLAMACPP_URL=http://host.docker.internal:8080/v1

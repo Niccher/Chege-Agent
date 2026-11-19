@@ -1,46 +1,58 @@
-from pathlib import Path
 from typing import Generator
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
-from backend.app.core.config import get_settings
+from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 
 logger = get_logger("db")
 
+_engine = None
+_engine_url_key: str | None = None
+
+
+def _resolve_db_url(settings: Settings) -> str:
+    """Return the configured DSN, or the default embedded SQLite URL."""
+    configured = (settings.database_url or "").strip()
+    if configured:
+        return configured
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{settings.data_dir / 'chege.db'}"
+
 
 def get_engine():
     settings = get_settings()
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = settings.data_dir / "chege.db"
-    db_url = f"sqlite:///{db_path}"
+    db_url = _resolve_db_url(settings)
+    is_sqlite = db_url.startswith("sqlite:")
 
-    engine = create_engine(
-        db_url,
-        connect_args={"check_same_thread": False},
-        echo=False,
-    )
+    kwargs: dict = {"echo": False}
+    if is_sqlite:
+        kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        # Postgres: tolerate a brief DB restart and cap connections.
+        kwargs.update(pool_pre_ping=True, pool_size=5, max_overflow=10)
 
-    # Enable SQLite WAL mode and foreign key constraints on connect (DATA-01)
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.close()
+    engine = create_engine(db_url, **kwargs)
 
+    if is_sqlite:
+        # WAL mode, foreign keys and synchronous NORMAL are SQLite-only.
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
+
+    logger.info(f"Database engine ready ({'sqlite' if is_sqlite else 'postgresql'}).")
     return engine
 
 
-_engine = None
-
-
 def get_db_engine():
-    global _engine
-    settings = get_settings()
-    expected_url = f"sqlite:///{settings.data_dir / 'chege.db'}"
-    if _engine is None or str(_engine.url) != expected_url:
+    global _engine, _engine_url_key
+    url_key = _resolve_db_url(get_settings())
+    if _engine is None or _engine_url_key != url_key:
         _engine = get_engine()
+        _engine_url_key = url_key
     return _engine
 
 
@@ -63,4 +75,3 @@ def get_db_session() -> Generator[Session, None, None]:
     engine = get_db_engine()
     with Session(engine, expire_on_commit=False) as session:
         yield session
-

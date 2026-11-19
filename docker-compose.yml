@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Secure Docker API proxy limiting container permissions (SBX-01)
   docker-socket-proxy:
@@ -24,18 +22,22 @@ services:
     image: chege-agent:0.2.0
     container_name: chege-agent
     ports:
-      # Bind to localhost on standard port 8000 (SEC-03)
-      - "127.0.0.1:8000:8000"
+      # Loopback only — the app has no authentication by design.
+      - "127.0.0.1:${CHEGE_PORT:-8000}:8000"
     environment:
       - CHEGE_HOST=0.0.0.0
       - CHEGE_PORT=8000
+      # Empty => embedded SQLite. Filled by --with-postgres in deploy.sh.
+      - CHEGE_DATABASE_URL=${CHEGE_DATABASE_URL:-}
       - CHEGE_DATA_DIR=/app/data
       - CHEGE_WORKDIR=/app/workdir
       - CHEGE_LOGS_DIR=/app/logs
-      - CHEGE_SANDBOX_BACKEND=docker
-      - CHEGE_DOCKER_SOCKET_PROXY=tcp://docker-socket-proxy:2375
-      - CHEGE_DEFAULT_PROVIDER=llama_cpp
+      - CHEGE_SANDBOX_BACKEND=${CHEGE_SANDBOX_BACKEND:-docker}
+      - CHEGE_DOCKER_SOCKET_PROXY=${CHEGE_DOCKER_SOCKET_PROXY:-tcp://docker-socket-proxy:2375}
+      - CHEGE_DEFAULT_SANDBOX_IMAGE=${CHEGE_DEFAULT_SANDBOX_IMAGE:-chege-sandbox-polyglot:latest}
+      - CHEGE_DEFAULT_PROVIDER=${CHEGE_DEFAULT_PROVIDER:-llama_cpp}
       - CHEGE_LLAMACPP_URL=http://host.docker.internal:8080/v1
+      - CHEGE_LLAMACPP_CONTROL_URL=http://host.docker.internal:8081
       - CHEGE_OLLAMA_URL=http://host.docker.internal:11434
     volumes:
       # Persistent application data and workspace directories

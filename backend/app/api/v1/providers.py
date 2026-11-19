@@ -5,9 +5,8 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.providers.factory import get_provider
 from backend.app.providers.llama_cpp import LlamaCppProvider
 from backend.app.providers.ollama import OllamaProvider
-from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/providers", tags=["v1-providers"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/providers", tags=["v1-providers"])
 
 
 class SetActiveProviderRequest(BaseModel):

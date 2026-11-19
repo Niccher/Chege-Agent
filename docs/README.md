@@ -1,35 +1,51 @@
 # Chege Agent — Engineering Documentation
 
-Welcome to the engineering documentation for **Chege Agent**. This directory is structured for software engineers, systems architects, and maintainers who need to understand, extend, debug, or deploy Chege Agent.
-
-If you only need to run Chege Agent as an operator or end-user, refer to the root [README.md](../README.md).
+This directory documents the architecture, contracts and operations of **Chege Agent**, a single-user local coding agent. Operators who only want to run the app should start at the root [README.md](../README.md).
 
 ---
 
-## Documentation Index
+## Current product decisions
+
+| Area | Implementation |
+|---|---|
+| Runtime | Personal, local-only service. No auth, users or tenants. `127.0.0.1` bind and loopback Compose port are part of the security boundary. |
+| Deployment | `bash scripts/deploy.sh` is the supported one-command path; manual Compose remains available. |
+| UI | AdminLTE 4.10.2 layout with locally vendored assets. Real pages: `/`, `/app`, `/guide`, `/setup`, `/api`, `/security`, `/status`; Swagger stays at `/docs`. |
+| REST | `/api/v1/*` only. Legacy `/api/*` aliases removed. `201 + Location` on creates, `202 + Location` on runs, `409` for duplicates. |
+| Approvals | `auto_edit` uses exact-argv command allowlisting and keeps destructive tools gated. |
+| Checkpoints | Created automatically at run start; revert saves dirty work to a safety stash first. |
+| Database | SQLite default; opt-in internal Postgres via `bash scripts/deploy.sh --with-postgres` (no published port). |
+| Sandbox | Docker SDK through `tcp://docker-socket-proxy:2375` and a per-project container. No silent fallback; `--local-sandbox` is explicit no-isolation mode. |
+
+---
+
+## Documentation index
 
 | Topic | Description | Link |
 |---|---|---|
-| **User & Operator Guides** | Detailed setup, complete configuration table, and operational troubleshooting. | [User Documentation](user/setup-and-run.md) |
-| **Architecture Overview** | High-level system design, container boundaries, component roles, and data flow. | [Architecture Overview](architecture/overview.md) |
-| **Communication & Streaming** | Protocols, authentication methods, sequence diagrams, and Server-Sent Events (SSE). | [Communication](architecture/communication.md) |
-| **Data & Storage** | SQLModel schema, SQLite persistence, Project Brain memory, and checkpoint management. | [Data & Storage](architecture/data-and-storage.md) |
-| **Threat Model & Sandboxing** | STRIDE analysis, Docker socket proxy isolation, and path traversal defenses. | [Threat Model](architecture/threat-model.md) |
-| **API Contract** | Comprehensive REST endpoint definitions, request/response models, and status codes. | [API Contract](api/contract.md) |
-| **FastAPI Backend Service** | Deep dive into `backend/app/`, lifespans, router registration, and provider adapters. | [FastAPI Service](services/fastapi.md) |
-| **Local Development** | Setting up a development environment natively with Python 3.12 without Docker. | [Local Development](engineering/local-development.md) |
-| **Making Changes** | Step-by-step developer recipes: adding tools, adding LLM providers, and Definition of Done. | [Making Changes](engineering/making-changes.md) |
-| **Testing** | Running unit and integration test suites, writing mocks, and CI guidelines. | [Testing](engineering/testing.md) |
-| **Operations Runbook** | SOPs for restarts, container rebuilds, backup, and state restoration. | [Restart Runbook](runbooks/restart.md) |
+| **User & Operator Guides** | Setup, configuration and troubleshooting. | [Setup and run](user/setup-and-run.md) · [Configuration](user/configuration.md) · [Troubleshooting](user/troubleshooting.md) |
+| **Implementation Plan** | Capability matrix, decisions and phased delivery status. | [Implementation Plan](engineering/implementation-plan.md) |
+| **Architecture Overview** | Container boundaries, components and data flow. | [Architecture Overview](architecture/overview.md) |
+| **Communication & Streaming** | REST/SSE protocols and sequence diagrams. | [Communication](architecture/communication.md) |
+| **Data & Storage** | SQLModel schema, SQLite/Postgres, checkpoints. | [Data & Storage](architecture/data-and-storage.md) |
+| **Threat Model & Sandboxing** | STRIDE analysis, socket proxy, path containment. | [Threat Model](architecture/threat-model.md) |
+| **API Contract** | Canonical v1 endpoints, status codes and SSE events. | [API Contract](api/contract.md) |
+| **FastAPI Backend Service** | Lifespan, routers, providers and tools. | [FastAPI Service](services/fastapi.md) |
+| **Local Development** | Native Python setup without Docker. | [Local Development](engineering/local-development.md) |
+| **Making Changes** | Adding tools/providers and definition of done. | [Making Changes](engineering/making-changes.md) |
+| **Testing** | Unit/integration tests and conventions. | [Testing](engineering/testing.md) |
+| **Operations Runbook** | Restart, rebuild, backup and recovery. | [Restart Runbook](runbooks/restart.md) |
 
 ---
 
-## Quick Technology Reference
+## Quick technology reference
 
-- **Language & Runtime:** Python 3.11+ / Python 3.12
-- **Framework:** FastAPI with Uvicorn (ASGI)
-- **Database:** SQLModel / SQLAlchemy with SQLite (`./data/chege.db`)
-- **LLM Integrations:** Native Ollama Client (`ollama>=0.3.0`) & OpenAI-compatible REST Client (`httpx`)
-- **Sandboxing:** Docker Container Execution via `tecnativa/docker-socket-proxy` or Local Workspace fallback
-- **Real-Time Layer:** Server-Sent Events (SSE) with sequence replay (`?after=seq`)
-- **Frontend:** Single-page interface (Bootstrap 5, Vanilla JS, Diff2HTML, Highlight.js)
+- **Runtime:** Python 3.12 / FastAPI / Uvicorn
+- **Database:** SQLite (`./data/chege.db`) by default; optional internal Postgres 16
+- **LLM clients:** llama.cpp (default), Ollama, OpenAI-compatible REST
+- **UI:** AdminLTE 4 + Bootstrap 5.3, vanilla JS, marked/DOMPurify, highlight.js, diff2html — all vendored locally
+- **API:** `/api/v1/*` REST + Server-Sent Events with `?after=<seq>` replay
+- **Isolation:** restricted Docker socket proxy → per-project container; explicit `local` fallback only
+- **Deploy:** `scripts/deploy.sh` with `doctor`, `status`, `logs`, `stop`, `restart` subcommands
+
+Run `bash scripts/deploy.sh doctor` for a host preflight and `./py-env/bin/python -m pytest -q` for tests.

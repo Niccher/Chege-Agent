@@ -1,0 +1,35 @@
+# Optional Postgres overlay. Use together with docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+# Or simply: bash scripts/deploy.sh --with-postgres
+#
+# Postgres is internal to the chege-net network. No host port is published.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chege-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chege}
+      POSTGRES_USER: ${POSTGRES_USER:-chege}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - chege_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chege} -d ${POSTGRES_DB:-chege}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - chege-net
+
+  chege-agent:
+    environment:
+      CHEGE_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-chege}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chege}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  chege_pgdata:

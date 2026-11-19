@@ -14,7 +14,7 @@ docker compose restart chege-agent
 
 Verify service readiness:
 ```bash
-curl -f http://127.0.0.1:9100/healthz
+curl -f http://127.0.0.1:8000/healthz
 ```
 
 ---

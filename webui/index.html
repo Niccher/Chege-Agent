@@ -1,1282 +1,159 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coding Agent WebUI</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" />
-    <!-- highlight.js for beautiful code syntax highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <style>
-        body { height: 100vh; overflow: hidden; background-color: #f8f9fa; }
-        .sidebar { height: 100vh; background-color: #1e1e2e; color: #cdd6f4; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; border-right: 1px solid #313244; }
-        .sidebar-content { flex-grow: 1; overflow-y: auto; }
-        .sidebar-footer { padding-top: 15px; border-top: 1px solid #313244; }
-        .main-content { height: 100vh; display: flex; flex-direction: column; }
-        .chat-container { flex-grow: 1; overflow-y: auto; padding: 20px; background: #181825; }
-        .chat-input-container { padding: 20px; background: #11111b; border-top: 1px solid #313244; }
-        .message { margin-bottom: 15px; padding: 12px 16px; border-radius: 8px; max-width: 80%; line-height: 1.5; }
-        .message.user { background-color: #89b4fa; color: #11111b; align-self: flex-end; margin-left: auto; font-weight: 500; }
-        .message.agent { background-color: #313244; color: #cdd6f4; align-self: flex-start; margin-right: auto; border: 1px solid #45475a; }
-        .message.system { background-color: #f9e2af; color: #11111b; align-self: center; margin: 0 auto; text-align: center; font-size: 0.9rem; font-weight: 500; }
-        .file-item { cursor: pointer; color: #a6adc8; padding: 4px 8px; border-radius: 4px; transition: background 0.15s; }
-        .file-item:hover { color: #89b4fa; background: rgba(255,255,255,0.05); }
-        pre code { background-color: #1e1e2e; padding: 10px; border-radius: 5px; display: block; overflow-x: auto; }
-        /* File Viewer Modal */
-        #fileModal .modal-content { background: #1e1e2e; color: #cdd6f4; border: 1px solid #45475a; }
-        #fileModal .modal-header { background: #11111b; border-bottom: 1px solid #313244; }
-        #fileModal .modal-header .modal-title { color: #cdd6f4; font-family: monospace; font-size: 0.95rem; }
-        #fileModal .modal-header .btn-close { filter: invert(1); }
-        #fileModal .modal-body { background: #1e1e2e; padding: 0; }
-        #fileModal pre { margin: 0; max-height: 75vh; overflow: auto; }
-        #fileModal pre code { border-radius: 0; font-size: 0.82rem; line-height: 1.6; }
-        .file-ext-badge { font-size: 0.72rem; background: #313244; color: #89b4fa; border-radius: 4px; padding: 2px 8px; font-family: monospace; margin-left: 8px; }
-        /* Tool indicator chip */
-        .tool-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-family: monospace;
-                     background: #313244; color: #f9e2af; border-radius: 20px; padding: 2px 10px;
-                     border: 1px solid #45475a; animation: tool-chip-in 0.2s ease; }
-        @keyframes tool-chip-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
-        .tool-chips-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-        /* New Project Modal */
-        .project-slug-preview { font-family: monospace; font-size: 0.85rem; background: #f1f3f5; border-radius: 4px; padding: 4px 8px; color: #495057; }
-        .project-slug-preview.valid { border-left: 3px solid #198754; }
-        .project-slug-preview.invalid { border-left: 3px solid #dc3545; color: #dc3545; }
-        #newProjectModal .modal-header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
-        #newProjectModal .project-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
-        /* Metrics bar */
-        .metrics-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #45475a; }
-        .metric-badge { font-size: 0.72rem; background: #1e1e2e; color: #a6adc8; border-radius: 20px; padding: 2px 10px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid #313244; }
-        .metric-badge .metric-value { font-weight: 700; color: #cdd6f4; }
-        .message.agent pre { margin: 0 0 4px 0; }
-        .message.agent pre code.hljs { border-radius: 0 0 6px 6px; font-size: 0.83rem; }
-        /* Code block wrapper */
-        .code-block-wrapper { border-radius: 8px; overflow: hidden; margin: 8px 0; border: 1px solid #45475a; }
-        .code-block-header { background: #11111b; padding: 6px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #313244; }
-        .code-lang-label { font-size: 0.72rem; color: #a6adc8; font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em; }
-        .copy-btn { font-size: 0.72rem; background: transparent; border: 1px solid #45475a; color: #a6adc8; border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: all 0.15s; }
-        .copy-btn:hover { background: #313244; color: #cdd6f4; }
-        .copy-btn.copied { border-color: #a6e3a1; color: #a6e3a1; }
-        /* Tools panel settings modal */
-        .tool-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #dee2e6; }
-        .tool-toggle-row:last-child { border-bottom: none; }
-        .tool-label { font-size: 0.85rem; color: #212529; }
-        .tool-label.dangerous { color: #dc3545; }
-        .tool-label .tool-name { font-family: monospace; font-weight: 700; }
-        .form-check-input:checked { background-color: #198754; border-color: #198754; }
-        /* Tool call card */
-        .tool-call-card { background: #1e1e2e; border: 1px solid #3d3d5c; border-radius: 6px; margin: 6px 0; overflow: hidden; }
-        .tool-call-header { padding: 6px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-        .tool-call-header:hover { background: rgba(255,255,255,0.05); }
-        .tool-call-name { font-family: monospace; font-size: 0.82rem; color: #89b4fa; font-weight: 600; }
-        .tool-call-args { font-size: 0.75rem; color: #a6adc8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
-        .tool-call-body { padding: 8px 12px; background: #11111b; border-top: 1px solid #313244; display: none; }
-        .tool-call-body pre { margin: 0; font-size: 0.75rem; color: #a6e3a1; white-space: pre-wrap; }
-        /* Tool Approval Card styles */
-        .tool-approval-card { background: #1e1e2e; border: 1px solid #eba0ac; border-radius: 8px; margin: 12px 0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .tool-approval-header { background: #eba0ac; color: #11111b; padding: 8px 14px; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
-        .tool-approval-body { padding: 12px 14px; background: #181825; }
-        .tool-approval-item { border-bottom: 1px dashed #313244; padding-bottom: 10px; margin-bottom: 10px; }
-        .tool-approval-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
-        .tool-item-title { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: #eba0ac; font-family: monospace; font-weight: bold; margin-bottom: 6px; }
-        .tool-item-title input[type="checkbox"] { cursor: pointer; accent-color: #eba0ac; }
-        .tool-item-args { font-size: 0.75rem; }
-        .tool-item-args textarea { background: #11111b; border: 1px solid #313244; color: #a6e3a1; font-family: monospace; font-size: 0.75rem; border-radius: 4px; padding: 6px 10px; width: 100%; resize: vertical; }
-        .tool-approval-actions { display: flex; gap: 8px; margin-top: 10px; }
-        .tool-approval-actions button { font-size: 0.78rem; font-weight: bold; border-radius: 4px; padding: 4px 12px; }
-
-        /* Agent Thinking Animation */
-        .thinking-bubble { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
-        .thinking-title { font-size: 0.82rem; font-weight: 600; color: #89b4fa; display: flex; align-items: center; gap: 8px; }
-        .pulse-loader { display: flex; gap: 4px; }
-        .pulse-dot { width: 6px; height: 6px; background: #89b4fa; border-radius: 50%; animation: pulse-anim 1.4s infinite ease-in-out both; }
-        .pulse-dot:nth-child(1) { animation-delay: -0.32s; }
-        .pulse-dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes pulse-anim {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1.0); }
-        }
-        .skeleton-lines { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-        .skeleton-line { height: 10px; background: #45475a; border-radius: 4px; animation: skeleton-shimmer 1.8s infinite ease-in-out; }
-        .skeleton-line.short { width: 55%; }
-        .skeleton-line.medium { width: 85%; }
-        .skeleton-line.long { width: 100%; }
-        @keyframes skeleton-shimmer {
-            0% { opacity: 0.3; }
-            50% { opacity: 0.8; }
-            100% { opacity: 0.3; }
-        }
-        .sidebar select.form-select {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
-            background-size: 12px 12px;
-        }
-        /* Project Brief styles */
-        .brief-card { background: #181825; border: 1px solid #313244; border-radius: 6px; padding: 10px; margin-top: 10px; }
-        .brief-header { font-size: 0.78rem; font-weight: 700; color: #f5c2e7; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center; }
-        .brief-input { background: #11111b; border: 1px solid #313244; color: #cdd6f4; font-size: 0.75rem; border-radius: 4px; padding: 4px 8px; width: 100%; margin-bottom: 6px; outline: none; transition: border-color 0.15s; }
-        .brief-input::placeholder { color: #585b70; }
-        .brief-input:focus { border-color: #f5c2e7; }
-        .btn-brief-save { background: #f5c2e7; color: #11111b; font-size: 0.7rem; font-weight: 700; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; display: block; width: 100%; transition: opacity 0.15s; }
-        .btn-brief-save:hover { opacity: 0.9; }
-        .completed-steps-list { max-height: 80px; overflow-y: auto; font-size: 0.7rem; color: #a6adc8; padding-left: 12px; margin-bottom: 0; }
-        .completed-steps-list li { margin-bottom: 2px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/assets/chege.svg">
+  <link rel="alternate icon" href="/assets/chege.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/chege-192.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('lte-theme') || 'light';
+        if (t === 'auto') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        t = t === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <title>Chege Agent — Your personal coding agent</title>
+  <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
+  <link rel="stylesheet" href="/assets/vendor/all.min.css">
+  <link rel="stylesheet" href="/assets/app.css">
 </head>
-<body>
-
-<div class="container-fluid">
-    <div class="row">
-        <!-- Sidebar -->
-        <div class="col-md-3 sidebar">
-            <div class="sidebar-content">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4 class="mb-0 text-white">Chege Agent</h4>
-                </div>
-                
-                <div class="mb-3">
-                    <label for="projectSelect" class="form-label text-white-50">Active Project</label>
-                    <div class="input-group">
-                        <select class="form-select bg-dark text-white border-secondary" id="projectSelect">
-                            <option value="default-project">default-project</option>
-                        </select>
-                        <button class="btn btn-success" type="button" id="newProjectBtn" title="Create New Project">＋</button>
-                        <button class="btn btn-outline-danger" type="button" id="deleteProjectBtn" title="Delete Active Project">🗑️</button>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label for="modelSelect" class="form-label text-white-50">Select Model</label>
-                    <select class="form-select bg-dark text-white border-secondary" id="modelSelect">
-                        <option value="">Loading models...</option>
-                    </select>
-                </div>
-                
-                <hr class="border-secondary">
-
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0 text-white-50">📁 Workspace Files</h6>
-                    <button class="btn btn-sm btn-outline-light py-0 px-2" id="refreshFilesBtn">↻</button>
-                </div>
-                <ul class="list-unstyled mb-3" id="fileList">
-                    <!-- Files will be populated here -->
-                </ul>
-
-                <hr class="border-secondary">
-
-                <!-- Project Brief memory panel -->
-                <div class="brief-card">
-                    <div class="brief-header">
-                        <span>🧠 Project Memory</span>
-                        <span id="briefStatus" style="font-size:0.65rem; color:#a6e3a1; display:none;">Saved ✓</span>
-                    </div>
-                    <textarea class="brief-input" id="briefGoal" rows="2" placeholder="Project Goal (e.g. Build an expressive web app)"></textarea>
-                    <input type="text" class="brief-input" id="briefStack" placeholder="Tech Stack / Language (e.g. Python, JS)">
-                    <textarea class="brief-input" id="briefNotes" rows="2" placeholder="Architecture / custom notes"></textarea>
-                    <button class="btn-brief-save" id="saveBriefBtn">💾 Save to Agent Brain</button>
-                    
-                    <div class="mt-2 pt-2 border-top border-secondary">
-                        <small style="font-size: 0.68rem; font-weight:700; color:#b4befe; text-transform:uppercase;">Steps Completed:</small>
-                        <ul class="completed-steps-list" id="briefSteps">
-                            <li><i style="color:#585b70;">No steps run yet</i></li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <div class="sidebar-footer">
-                <button class="btn btn-warning w-100 mb-2 py-2 fw-semibold" id="viewDiffBtn">🔍 View Current Diffs</button>
-                <button class="btn btn-success w-100 mb-2 py-2 fw-semibold" id="commitBtn">💾 Commit Changes</button>
-                <button class="btn btn-outline-info w-100 py-2 fw-semibold" id="openSettingsBtn">⚙️ Global Settings</button>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="col-md-9 main-content p-0">
-            <div class="chat-container d-flex flex-column" id="chatHistory">
-                <div class="message system">
-                    Welcome! Switch projects in the sidebar to load history, or start chatting below.
-                </div>
-            </div>
-            
-            <div class="chat-input-container">
-                <form id="chatForm" class="d-flex">
-                    <textarea class="form-control me-2" id="chatInput" rows="2" placeholder="Ask the agent to build something..." required></textarea>
-                    <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
-                </form>
-            </div>
-        </div>
+<body class="hold-transition">
+<div class="wrapper">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark chege-landing-nav">
+    <div class="container">
+      <a class="navbar-brand chege-brand" href="/"><span class="chege-brand-mark"><i class="fas fa-robot"></i></span>Chege Agent</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#landing-nav"
+              aria-controls="landing-nav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="landing-nav">
+        <ul class="navbar-nav ml-auto align-items-lg-center">
+          <li class="nav-item"><a class="nav-link" href="/guide">How it works</a></li>
+          <li class="nav-item"><a class="nav-link" href="/setup">Setup</a></li>
+          <li class="nav-item"><a class="nav-link" href="/api">API</a></li>
+          <li class="nav-item"><a class="nav-link" href="/security">Safety</a></li>
+          <li class="nav-item"><a class="nav-link" href="/settings">Settings</a></li>
+          <li class="nav-item"><a class="nav-link" href="/models">Models</a></li>
+          <li class="nav-item"><a class="nav-link" href="/status">Status</a></li>
+          <li class="nav-item ml-2">
+            <button class="btn btn-sm btn-outline-light chege-theme-btn" type="button"
+                    data-chege-theme-toggle aria-label="Toggle theme"><i class="fas fa-sun"></i></button>
+          </li>
+          <li class="nav-item ml-2"><a class="btn btn-sm btn-primary" href="/app"><i class="fas fa-play"></i> Open Playground</a></li>
+        </ul>
+      </div>
     </div>
-</div>
+  </nav>
 
-<!-- File Viewer Modal -->
-<div class="modal fade" id="fileModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="fileModalTitle">File Viewer</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <pre><code id="fileModalContent"></code></pre>
-            </div>
+  <section class="content">
+    <div class="container py-4">
+      <div class="chege-hero">
+        <span class="chege-badge"><i class="fas fa-house-lock"></i> Personal · Local-only · No login</span>
+        <h1 class="mt-3">An AI coding agent that works in your workspace,<br>not just in your chat window.</h1>
+        <p class="lead mt-3">Chege Agent creates project workspaces, talks to your local model, runs tools with streaming output,
+          asks before risky commands, and lets you inspect every diff and roll back with one click.</p>
+        <div class="mt-4">
+          <a class="btn btn-primary btn-lg mr-2" href="/app"><i class="fas fa-terminal"></i> Open Playground</a>
+          <a class="btn btn-outline-light btn-lg" href="/guide"><i class="fas fa-book"></i> See how it works</a>
         </div>
-    </div>
-</div>
+        <div class="mt-4 small text-white-50">Runs on <span class="chege-host">127.0.0.1</span>. Your code never needs a cloud account.</div>
+      </div>
 
-<!-- Diff Viewer Modal -->
-<div class="modal fade" id="diffModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Git Diffs</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="diffModalContent">
-            </div>
+      <div class="row mt-5">
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-folder-tree"></i></div>
+            <h5>Project workspaces</h5><p class="text-muted mb-0">Each project gets an isolated folder and its own Git repository.</p></div>
         </div>
-    </div>
-</div>
-
-<!-- Settings Modal -->
-<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title">⚙️ LLM Provider & Agent Settings</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4">
-                
-                <!-- Section 1: Provider Selection -->
-                <div class="mb-4">
-                    <label class="form-label fw-bold">1. Active Inference Engine</label>
-                    <div class="d-flex gap-3 mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="providerRadio" id="providerLlamaCpp" value="llama_cpp" checked>
-                            <label class="form-check-label fw-semibold" for="providerLlamaCpp">
-                                🦙 llama.cpp Server (Default & Recommended)
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="providerRadio" id="providerOllama" value="ollama">
-                            <label class="form-check-label fw-semibold" for="providerOllama">
-                                🦙 Ollama Daemon
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- llama.cpp config box -->
-                    <div id="llamacppConfigBox" class="p-3 border rounded mb-3 bg-light">
-                        <label class="form-label small text-muted fw-bold">llama.cpp Server URL (Standard Port 8080)</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control font-monospace" id="llamacppUrl" placeholder="http://host.docker.internal:8080/v1">
-                            <button class="btn btn-outline-dark" type="button" id="testLlamaCppBtn">
-                                <span id="testLlamaCppSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
-                                🔌 Test llama.cpp
-                            </button>
-                        </div>
-                        <small class="text-muted d-block mt-1">Run: <code>llama-server -m model.gguf --port 8080 --host 0.0.0.0 -c 16384</code></small>
-                    </div>
-
-                    <!-- Ollama config box -->
-                    <div id="ollamaConfigBox" class="p-3 border rounded mb-3 bg-light">
-                        <label class="form-label small text-muted fw-bold">Ollama Host URL (Standard Port 11434)</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control font-monospace" id="ollamaUrl" placeholder="http://host.docker.internal:11434">
-                            <button class="btn btn-outline-dark" type="button" id="testConnectionBtn">
-                                <span id="testSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
-                                🔌 Test Ollama
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="testResult" class="alert d-none mt-2 mb-0 py-2" role="alert"></div>
-                </div>
-
-                <hr>
-
-                <!-- Section 2: Active Tools -->
-                <div class="mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <label class="form-label fw-bold mb-0">2. Active Agent Tools</label>
-                        <button class="btn btn-sm btn-outline-secondary py-0" id="toggleAllToolsBtn">All On</button>
-                    </div>
-                    <div class="border rounded p-3 bg-light" id="toolsList" style="max-height: 280px; overflow-y: auto;">
-                        <small class="text-muted">Loading tools...</small>
-                    </div>
-                </div>
-
-            </div>
-            <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-success px-4" id="saveSettingsBtn">
-                    💾 Save Config & Refresh
-                </button>
-            </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-bolt"></i></div>
+            <h5>Live streaming</h5><p class="text-muted mb-0">Watch tokens, reasoning and tool results arrive over Server-Sent Events.</p></div>
         </div>
-    </div>
-</div>
-
-<!-- New Project Modal -->
-<div class="modal fade" id="newProjectModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-md">
-        <div class="modal-content">
-            <div class="modal-header text-white">
-                <div>
-                    <div class="project-icon">🗂️</div>
-                    <h5 class="modal-title mb-0">Create New Project</h5>
-                    <small class="text-white-50">A new isolated workspace and git repo will be created</small>
-                </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4">
-                <div class="mb-4">
-                    <label for="newProjectNameInput" class="form-label fw-semibold">Project Name</label>
-                    <input type="text" class="form-control form-control-lg" id="newProjectNameInput"
-                           placeholder="e.g. My Awesome App"
-                           autocomplete="off">
-                    <div class="form-text">Give it a human-friendly name — it will be auto-converted to a slug.</div>
-                </div>
-                <div class="mb-4">
-                    <label class="form-label fw-semibold">Folder / Slug</label>
-                    <div id="slugPreview" class="project-slug-preview">—</div>
-                    <div class="form-text">This is the actual folder name used on disk.</div>
-                </div>
-                <div class="mb-3">
-                    <label for="newProjectDesc" class="form-label fw-semibold">Description <span class="text-muted fw-normal">(optional)</span></label>
-                    <textarea class="form-control" id="newProjectDesc" rows="2"
-                              placeholder="What is this project for?"></textarea>
-                </div>
-                <div id="newProjectError" class="alert alert-danger d-none py-2"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success px-4" id="createProjectBtn" disabled>
-                    🚀 Create Project
-                </button>
-            </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-shield-halved"></i></div>
+            <h5>Approval gates</h5><p class="text-muted mb-0">Safe edits auto-run; destructive or shell actions wait for your OK.</p></div>
         </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-rotate-left"></i></div>
+            <h5>Automatic checkpoints</h5><p class="text-muted mb-0">Every run starts with a snapshot, so revert is always available.</p></div>
+        </div>
+      </div>
+
+      <div class="row mt-4">
+        <div class="col-lg-7">
+          <h3 class="mb-3">How a run works</h3>
+          <div class="timeline">
+            <div class="time-label"><span class="bg-primary">1</span></div>
+            <div><i class="fas fa-folder-plus bg-primary"></i><div class="timeline-item"><h3 class="timeline-header">Create a project</h3>
+              <div class="timeline-body">A slug, a workspace and a Git repo are created for you.</div></div></div>
+            <div><i class="fas fa-comments bg-info"></i><div class="timeline-item"><h3 class="timeline-header">Start a thread and send a prompt</h3>
+              <div class="timeline-body">Choose a provider (llama.cpp, Ollama or OpenAI-compatible) and a policy mode.</div></div></div>
+            <div><i class="fas fa-bolt bg-warning"></i><div class="timeline-item"><h3 class="timeline-header">Stream and approve</h3>
+              <div class="timeline-body">Tokens and tool calls appear live. Risky commands pause for your decision.</div></div></div>
+            <div><i class="fas fa-code-diff bg-success"></i><div class="timeline-item"><h3 class="timeline-header">Inspect, commit or revert</h3>
+              <div class="timeline-body">Read the diff, commit changes, or roll the workspace back to the pre-run checkpoint.</div></div></div>
+            <div><i class="far fa-clock bg-gray"></i></div>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <h3 class="mb-3">60-second quickstart</h3>
+          <pre class="doc-code"><code>git clone &lt;your-repo-url&gt;
+cd "Chege Agent"
+bash scripts/deploy.sh
+
+# open the landing page
+http://<span class="chege-host">127.0.0.1</span>/</code></pre>
+          <p class="text-muted small mt-2">Want Postgres instead of SQLite?
+            <code>bash scripts/deploy.sh --with-postgres</code> starts an internal database with no published port.</p>
+          <a href="/setup" class="btn btn-outline-primary btn-sm"><i class="fas fa-list-check"></i> Full setup guide</a>
+          <hr>
+          <h5><i class="fas fa-lock"></i> Local by design</h5>
+          <p class="text-muted small">There is deliberately no login, no users and no tenants. The port is bound to
+            <code>127.0.0.1</code>; for remote use, connect over an SSH tunnel. Read the
+            <a href="/security">safety model</a> before enabling <code>full_auto</code>.</p>
+        </div>
+      </div>
+
+      <div class="row mt-5 mb-5">
+        <div class="col-md-6">
+          <div class="chege-feature h-100">
+            <h4><i class="fas fa-plug text-primary"></i> Built on a versioned API</h4>
+            <p class="text-muted">Everything the UI does is available through <code>/api/v1/*</code> — use Swagger or your own scripts.</p>
+            <a href="/api" class="btn btn-sm btn-outline-primary">API reference</a>
+            <a href="/docs" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">Swagger UI</a>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="chege-feature h-100">
+            <h4><i class="fas fa-question-circle text-primary"></i> Questions?</h4>
+            <p class="text-muted mb-1"><b>Does it need internet?</b> No — local model and vendored UI assets.</p>
+            <p class="text-muted mb-1"><b>Can I use OpenAI?</b> Yes, set a key in settings and select the provider.</p>
+            <p class="text-muted"><b>Can I expose it publicly?</b> Don't. Use a tunnel and the loopback binding.</p>
+            <a href="/guide" class="btn btn-sm btn-outline-primary">Read the guide</a>
+          </div>
+        </div>
+      </div>
     </div>
+  </section>
+
+  <footer class="chege-footer">
+    <div class="container-fluid d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <span><strong>Chege Agent</strong> · personal, local-only · no login, no telemetry</span>
+      <span class="chege-footer-links">
+        <a href="/guide">Guide</a> · <a href="/setup">Setup</a> · <a href="/settings">Settings</a> ·
+        <a href="/models">Models</a> · <a href="/api">API</a> · <a href="/security">Safety</a> ·
+        <a href="/status">Status</a> · <a href="/docs" target="_blank" rel="noopener">Swagger</a> ·
+        <a href="/healthz">Health</a>
+      </span>
+    </div>
+  </footer>
 </div>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
-
-<script>
-    const API_BASE = '';
-    const renderer = new marked.Renderer();
-    renderer.code = function(code, language) {
-        if (typeof code === 'object' && code !== null) {
-            language = code.lang || '';
-            code = code.text || '';
-        }
-        const lang = (language || 'plaintext').toLowerCase();
-        let highlighted;
-        try {
-            if (lang && hljs.getLanguage(lang)) {
-                highlighted = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
-            } else {
-                highlighted = hljs.highlightAuto(code).value;
-            }
-        } catch(e) {
-            highlighted = marked.Lexer.escapeTest.test(code)
-                ? code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                : code;
-        }
-        const id = 'cb-' + Math.random().toString(36).slice(2, 9);
-        return `
-<div class="code-block-wrapper">
-  <div class="code-block-header">
-    <span class="code-lang-label">${lang}</span>
-    <button class="copy-btn" id="btn-${id}" onclick="copyCode('${id}', 'btn-${id}')">📋 Copy</button>
-  </div>
-  <pre><code id="${id}" class="hljs language-${lang}">${highlighted}</code></pre>
-</div>`;
-    };
-
-    marked.use({ renderer, breaks: true, gfm: true });
-
-    function copyCode(codeId, btnId) {
-        const el = document.getElementById(codeId);
-        const btn = document.getElementById(btnId);
-        if (!el || !btn) return;
-        navigator.clipboard.writeText(el.innerText).then(() => {
-            btn.textContent = '✅ Copied!';
-            btn.classList.add('copied');
-            setTimeout(() => {
-                btn.textContent = '📋 Copy';
-                btn.classList.remove('copied');
-            }, 2000);
-        }).catch(() => {
-            const ta = document.createElement('textarea');
-            ta.value = el.innerText;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            btn.textContent = '✅ Copied!';
-            setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
-        });
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        const d = document.createElement('div');
-        d.textContent = String(str);
-        return d.innerHTML;
-    }
-
-    function renderMarkdown(text) {
-        const raw = marked.parse(text || '');
-        if (typeof DOMPurify !== 'undefined') {
-            return DOMPurify.sanitize(raw);
-        }
-        return raw;
-    }
-
-    function buildMetricsBar(metrics) {
-        if (!metrics) return '';
-        const m = metrics;
-        const tps = (m.tokens_per_sec && m.tokens_per_sec > 0) ? `${m.tokens_per_sec} tok/s` : '—';
-        const genTokens = m.tokens_generated || 0;
-        const promptTokens = m.prompt_tokens || 0;
-        const totalTime = m.total_time_s || 0;
-        const evalTime = m.eval_time_s || 0;
-        const loadTime = m.load_time_s || 0;
-        const toolIter = m.tool_iterations || 0;
-        const toolBadge = toolIter > 0
-            ? `<span class="metric-badge">🔧 <span class="metric-value">${toolIter}</span> tool call${toolIter > 1 ? 's' : ''}</span>`
-            : '';
-        return `
-        <div class="metrics-bar">
-            <span class="metric-badge">⚡ <span class="metric-value">${tps}</span></span>
-            <span class="metric-badge">🪙 <span class="metric-value">${genTokens}</span> generated</span>
-            <span class="metric-badge">📥 <span class="metric-value">${promptTokens}</span> prompt</span>
-            <span class="metric-badge">⏱ <span class="metric-value">${totalTime}s</span> total</span>
-            <span class="metric-badge">🧠 <span class="metric-value">${evalTime}s</span> eval</span>
-            ${loadTime > 0.1 ? `<span class="metric-badge">📦 <span class="metric-value">${loadTime}s</span> load</span>` : ''}
-            ${toolBadge}
-        </div>`;
-    }
-
-    function buildToolCallCards(toolCallLog) {
-        if (!toolCallLog || toolCallLog.length === 0) return '';
-        const cards = toolCallLog.map((tc, i) => {
-            const argsStr = JSON.stringify(tc.args).slice(0, 120);
-            const id = `tc-${Date.now()}-${i}`;
-            return `
-            <div class="tool-call-card">
-                <div class="tool-call-header" onclick="document.getElementById('${id}').style.display = document.getElementById('${id}').style.display === 'block' ? 'none' : 'block'">
-                    <span>🔧</span>
-                    <span class="tool-call-name">${tc.tool}</span>
-                    <span class="tool-call-args">${argsStr}</span>
-                    <span style="margin-left:auto;font-size:0.7rem;color:#64748b;">▼ result</span>
-                </div>
-                <div class="tool-call-body" id="${id}">
-                    <pre>${tc.result}</pre>
-                </div>
-            </div>`;
-        }).join('');
-        return `<div class="mb-2">${cards}</div>`;
-    }
-
-    function buildToolApprovalCard(toolCalls) {
-        if (!toolCalls || toolCalls.length === 0) return '';
-        const cardId = `approval-card-${Date.now()}`;
-        
-        // Build chip list for header
-        const toolNames = toolCalls.map(tc => tc.name || (tc.function ? tc.function.name : 'unknown'));
-        const chipsHtml = toolNames.map(n => `<span class="tool-chip">🔧 ${n}</span>`).join('');
-
-        let itemsHtml = '';
-        toolCalls.forEach((tc, idx) => {
-            const prettyArgs = JSON.stringify(tc.arguments || {}, null, 2);
-            itemsHtml += `
-            <div class="tool-approval-item" data-tool="${tc.name || (tc.function ? tc.function.name : '')}">
-                <div class="tool-item-title">
-                    <input type="checkbox" checked class="tool-approve-checkbox" id="chk-${cardId}-${idx}">
-                    <label for="chk-${cardId}-${idx}">🔧 Execute ${tc.name || (tc.function ? tc.function.name : '')}</label>
-                </div>
-                <div class="tool-item-args">
-                    <textarea class="tool-args-textarea" rows="${prettyArgs.split('\n').length || 3}">${prettyArgs}</textarea>
-                </div>
-            </div>`;
-        });
-
-        return `
-        <div class="tool-approval-card" id="${cardId}">
-            <div class="tool-approval-header">
-                🛡️ Tool Execution Approval Required
-                <div class="tool-chips-row" style="margin-top:6px;">${chipsHtml}</div>
-            </div>
-            <div class="tool-approval-body">
-                ${itemsHtml}
-                <div class="tool-approval-actions">
-                    <button class="btn btn-success btn-sm btn-execute" onclick="submitApprovals('${cardId}')">Approve & Execute</button>
-                    <button class="btn btn-danger btn-sm btn-reject" onclick="rejectApprovals('${cardId}')">Reject All</button>
-                </div>
-            </div>
-        </div>`;
-    }
-
-    window.submitApprovals = function(cardId) {
-        const card = $(`#${cardId}`);
-        const project = getProject();
-        const model = $('#modelSelect').val();
-        
-        const approvals = [];
-        let invalid = false;
-        card.find('.tool-approval-item').each(function() {
-            const item = $(this);
-            const toolName = item.data('tool');
-            const approved = item.find('.tool-approve-checkbox').is(':checked');
-            let args = {};
-            try {
-                args = JSON.parse(item.find('.tool-args-textarea').val());
-            } catch (e) {
-                alert('Invalid JSON in arguments for tool: ' + toolName);
-                invalid = true;
-                return;
-            }
-            approvals.push({
-                tool: toolName,
-                arguments: args,
-                approved: approved
-            });
-        });
-
-        if (invalid) return;
-
-        // Hide approval buttons, show thinking loader
-        card.find('.tool-approval-actions').html('<div class="text-white-50 fs-7">⚙️ Executing tools and resuming loop...</div>');
-        
-        const continueLoadingId = `load-${Date.now()}`;
-        const loadingHtml = `
-            <div class="message agent" id="${continueLoadingId}">
-                <div class="thinking-bubble">
-                    <div class="thinking-title">
-                        <span class="pulse-loader">
-                            <span class="pulse-dot"></span>
-                            <span class="pulse-dot"></span>
-                            <span class="pulse-dot"></span>
-                        </span>
-                        <span>Chege is running tools & thinking...</span>
-                    </div>
-                </div>
-            </div>`;
-        $('#chatHistory').append(loadingHtml);
-        scrollChat();
-
-        $.ajax({
-            url: `${API_BASE}/chat/continue`,
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({
-                project_name: project,
-                model: model,
-                enabled_tools: getEnabledTools(),
-                approvals: approvals
-            }),
-            success: function(response) {
-                card.remove();
-                $(`#${continueLoadingId}`).remove();
-                handleChatResponse(response);
-            },
-            error: function() {
-                card.find('.tool-approval-actions').html('<span class="text-danger">Error executing tools.</span>');
-                $(`#${continueLoadingId}`).remove();
-            }
-        });
-    };
-
-    window.rejectApprovals = function(cardId) {
-        const card = $(`#${cardId}`);
-        const project = getProject();
-        const model = $('#modelSelect').val();
-        
-        const approvals = [];
-        card.find('.tool-approval-item').each(function() {
-            const item = $(this);
-            const toolName = item.data('tool');
-            let args = {};
-            try {
-                args = JSON.parse(item.find('.tool-args-textarea').val());
-            } catch (e) {}
-            approvals.push({
-                tool: toolName,
-                arguments: args,
-                approved: false
-            });
-        });
-
-        card.find('.tool-approval-actions').html('<div class="text-white-50 fs-7">❌ Rejecting and resuming loop...</div>');
-        
-        const continueLoadingId = `load-${Date.now()}`;
-        const loadingHtml = `
-            <div class="message agent" id="${continueLoadingId}">
-                <div class="thinking-bubble">
-                    <div class="thinking-title">
-                        <span class="pulse-loader">
-                            <span class="pulse-dot"></span>
-                            <span class="pulse-dot"></span>
-                            <span class="pulse-dot"></span>
-                        </span>
-                        <span>Chege is thinking...</span>
-                    </div>
-                </div>
-            </div>`;
-        $('#chatHistory').append(loadingHtml);
-        scrollChat();
-
-        $.ajax({
-            url: `${API_BASE}/chat/continue`,
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({
-                project_name: project,
-                model: model,
-                enabled_tools: getEnabledTools(),
-                approvals: approvals
-            }),
-            success: function(response) {
-                card.remove();
-                $(`#${continueLoadingId}`).remove();
-                handleChatResponse(response);
-            },
-            error: function() {
-                card.find('.tool-approval-actions').html('<span class="text-danger">Error.</span>');
-                $(`#${continueLoadingId}`).remove();
-            }
-        });
-    };
-
-    function handleChatResponse(response) {
-        const project = getProject();
-        let html = buildToolCallCards(response.tool_call_log);
-        html += renderMarkdown(response.reply);
-
-        if (response.saved_files && response.saved_files.length > 0) {
-            html += '<hr><strong>📁 Files saved:</strong><ul>';
-            response.saved_files.forEach(f => {
-                html += `<li><code>${escapeHtml(f)}</code></li>`;
-            });
-            html += '</ul>';
-
-            $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
-                const list = $('#fileList');
-                list.empty();
-                if (data.files) {
-                    data.files.forEach(file => {
-                        const safeFile = escapeHtml(file);
-                        list.append(`<li class="file-item mb-1" data-file="${safeFile}">📄 ${safeFile}</li>`);
-                    });
-                }
-            });
-        }
-
-        if (response.status === 'success') {
-            html += buildMetricsBar(response.metrics);
-        }
-
-        if (response.status === 'awaiting_approval' && response.tool_calls && response.tool_calls.length > 0) {
-            // Show a non-dismissable notice that tool use was detected
-            const toolNames = response.tool_calls.map(tc => {
-                const fn = tc.function || tc;
-                return fn.name || (fn.function && fn.function.name) || '?';
-            });
-            const chipsHtml = toolNames.map(n => `<span class="tool-chip">🔧 ${n}</span>`).join('');
-            html += `<div style="margin-top:8px;"><small style="color:#a6adc8;">🔍 Tool use detected:</small><div class="tool-chips-row">${chipsHtml}</div></div>`;
-        }
-
-        const msgEl = $(`<div class="message agent">${html}</div>`);
-        msgEl.find('pre code').each(function() {
-            hljs.highlightElement(this);
-        });
-        $('#chatHistory').append(msgEl);
-
-        if (response.status === 'awaiting_approval') {
-            const approvalCardHtml = buildToolApprovalCard(response.tool_calls);
-            $('#chatHistory').append(approvalCardHtml);
-        }
-        
-        scrollChat();
-    }
-
-
-    function getEnabledTools() {
-        const checked = [];
-        $('#toolsList input[type=checkbox]:checked').each(function() {
-            checked.push($(this).val());
-        });
-        return checked;
-    }
-
-    function getProject() {
-        let p = $('#projectSelect').val();
-        return p ? p.trim() : 'default-project';
-    }
-
-    function scrollChat() {
-        const chatContainer = document.getElementById('chatHistory');
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
-
-    function loadModels() {
-        const select = $('#modelSelect');
-        select.html('<option value="">Loading models...</option>');
-        $.get(`${API_BASE}/models`, function(data) {
-            select.empty();
-            if (data.models.length === 0) {
-                select.append('<option>No models found.</option>');
-            } else {
-                data.models.forEach(model => {
-                    // Check if model name typically supports tool calling
-                    const name = model.toLowerCase();
-                    const canTool = name.includes('coder') ||
-                                    name.includes('llama3') ||
-                                    name.includes('qwen') ||
-                                    name.includes('mistral') ||
-                                    name.includes('gemma') ||
-                                    name.includes('command-r');
-                    const badge = canTool ? '🛠️ [Tool Capable]' : '📝 [No Tools]';
-                    select.append(`<option value="${model}">${model} (${badge})</option>`);
-                });
-            }
-    function loadModels() {
-        const select = $('#modelSelect');
-        select.html('<option value="">⏳ Fetching available models...</option>');
-        $.get(`${API_BASE}/api/v1/providers`, function(provData) {
-            const active = provData.active_provider || 'llama_cpp';
-            $(`input[name="providerRadio"][value="${active}"]`).prop('checked', true);
-            $.get(`${API_BASE}/api/v1/settings/models?provider=${active}`, function(data) {
-                select.empty();
-                if (!data.models || data.models.length === 0) {
-                    select.html('<option value="default">llama.cpp Loaded Model (default)</option>');
-                } else {
-                    data.models.forEach(m => {
-                        const mId = m.id || m.name;
-                        select.append(`<option value="${mId}">${m.name || mId} [${m.provider}]</option>`);
-                    });
-                }
-            }).fail(function() {
-                select.html('<option value="default">llama.cpp Loaded Model (Check Settings)</option>');
-            });
-        }).fail(function() {
-            select.html('<option value="default">llama.cpp Loaded Model (Default)</option>');
-        });
-    }
-
-    $(document).ready(function() {
-        $.get(`${API_BASE}/api/v1/settings`, function(data) {
-            $('#llamacppUrl').val(data.llamacpp_url || 'http://host.docker.internal:8080/v1');
-            $('#ollamaUrl').val(data.ollama_url || 'http://host.docker.internal:11434');
-            const prov = data.default_provider || 'llama_cpp';
-            $(`input[name="providerRadio"][value="${prov}"]`).prop('checked', true);
-            loadModels();
-        }).fail(function() {
-            loadModels();
-        });
-
-        $('#openSettingsBtn').click(function() {
-            $('#testResult').addClass('d-none').text('');
-            new bootstrap.Modal(document.getElementById('settingsModal')).show();
-        });
-
-        $('#testLlamaCppBtn').click(function() {
-            const url = $('#llamacppUrl').val().trim();
-            $('#testLlamaCppSpinner').removeClass('d-none');
-            $.ajax({
-                url: `${API_BASE}/api/v1/providers/test`,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ provider: 'llama_cpp', url: url }),
-                success: function(data) {
-                    const isOk = data.status === 'ok';
-                    $('#testResult').removeClass('d-none alert-success alert-danger alert-warning')
-                        .addClass(isOk ? 'alert-success' : 'alert-danger')
-                        .text(isOk ? `✅ Connected to llama.cpp server! (${data.url || url})` : `❌ ${data.message || 'Connection failed'}`);
-                },
-                error: function() {
-                    $('#testResult').removeClass('d-none alert-success alert-warning').addClass('alert-danger').text('❌ Could not reach Chege Agent backend.');
-                },
-                complete: function() {
-                    $('#testLlamaCppSpinner').addClass('d-none');
-                }
-            });
-        });
-
-        $('#testConnectionBtn').click(function() {
-            const url = $('#ollamaUrl').val().trim();
-            $('#testSpinner').removeClass('d-none');
-            $.ajax({
-                url: `${API_BASE}/api/v1/providers/test`,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ provider: 'ollama', url: url }),
-                success: function(data) {
-                    const isOk = data.status === 'ok';
-                    $('#testResult').removeClass('d-none alert-success alert-danger alert-warning')
-                        .addClass(isOk ? 'alert-success' : 'alert-danger')
-                        .text(isOk ? `✅ Connected to Ollama! Found ${data.models_count || 0} model(s).` : `❌ ${data.message || 'Connection failed'}`);
-                },
-                error: function() {
-                    $('#testResult').removeClass('d-none alert-success alert-warning').addClass('alert-danger').text('❌ Backend unreachable.');
-                },
-                complete: function() {
-                    $('#testSpinner').addClass('d-none');
-                }
-            });
-        });
-
-        $('#saveSettingsBtn').click(function() {
-            const selectedProv = $('input[name="providerRadio"]:checked').val() || 'llama_cpp';
-            const llamacppUrl = $('#llamacppUrl').val().trim();
-            const ollamaUrl = $('#ollamaUrl').val().trim();
-
-            $.ajax({
-                url: `${API_BASE}/api/v1/settings`,
-                type: 'PATCH',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    default_provider: selectedProv,
-                    llamacpp_url: llamacppUrl,
-                    ollama_url: ollamaUrl,
-                }),
-                success: function() {
-                    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
-                    loadModels();
-                }
-            });
-        });
-
-        function loadTools() {
-            $.get(`${API_BASE}/tools`, function(data) {
-                const list = $('#toolsList');
-                list.empty();
-                data.tools.forEach(tool => {
-                    const defaultOn = tool.id !== 'run_command';
-                    list.append(`
-                        <div class="tool-toggle-row">
-                            <span class="tool-label"><span class="tool-name">${tool.id}</span></span>
-                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" value="${tool.id}" ${defaultOn ? 'checked' : ''}></div>
-                        </div>`);
-                });
-            });
-        }
-        loadTools();
-
-        let allOn = true;
-        $('#toggleAllToolsBtn').click(function() {
-            allOn = !allOn;
-            $('#toolsList input[type=checkbox]').prop('checked', allOn);
-            $(this).text(allOn ? 'All On' : 'All Off');
-        });
-
-        // Load existing projects list
-        function loadProjectsList(selectAfter = null) {
-            $.get(`${API_BASE}/projects`, function(data) {
-                const select = $('#projectSelect');
-                select.empty();
-                if (!data.projects || data.projects.length === 0) {
-                    select.append('<option value="default-project">default-project</option>');
-                } else {
-                    data.projects.forEach(p => {
-                        select.append(`<option value="${p}">${p}</option>`);
-                    });
-                }
-                if (selectAfter) {
-                    select.val(selectAfter);
-                }
-                loadProjectState();
-            });
-        }
-
-        loadProjectsList();
-
-        $('#projectSelect').on('change', function() {
-            loadProjectState();
-        });
-
-        // Delete Active Project
-        $('#deleteProjectBtn').click(function() {
-            const project = getProject();
-            if (project === 'default-project') {
-                alert("The 'default-project' workspace cannot be deleted.");
-                return;
-            }
-            if (confirm(`Are you absolutely sure you want to delete the project '${project}'?\n\nThis will permanently delete all workspace files, metadata, and chat history. This action cannot be undone.`)) {
-                $.ajax({
-                    url: `${API_BASE}/projects/${project}`,
-                    type: 'DELETE',
-                    success: function(res) {
-                        alert(res.message || "Project deleted successfully.");
-                        loadProjectsList('default-project');
-                    },
-                    error: function(err) {
-                        alert("Error: " + (err.responseJSON?.detail || "Could not delete project."));
-                    }
-                });
-            }
-        });
-
-        // New Project Modal
-        function toSlug(name) {
-            return name.toLowerCase()
-                .trim()
-                .replace(/[^a-z0-9\s-]/g, '')
-                .replace(/\s+/g, '-')
-                .replace(/-+/g, '-')
-                .replace(/^-|-$/g, '');
-        }
-
-        $('#newProjectBtn').click(function() {
-            $('#newProjectNameInput').val('');
-            $('#newProjectDesc').val('');
-            $('#slugPreview').text('—').removeClass('valid invalid');
-            $('#newProjectError').addClass('d-none').text('');
-            $('#createProjectBtn').prop('disabled', true);
-            new bootstrap.Modal(document.getElementById('newProjectModal')).show();
-            setTimeout(() => $('#newProjectNameInput').focus(), 300);
-        });
-
-        $('#newProjectNameInput').on('input', function() {
-            const raw = $(this).val();
-            const slug = toSlug(raw);
-            const preview = $('#slugPreview');
-            const createBtn = $('#createProjectBtn');
-            const error = $('#newProjectError');
-
-            if (!raw.trim()) {
-                preview.text('—').removeClass('valid invalid');
-                createBtn.prop('disabled', true);
-                error.addClass('d-none');
-                return;
-            }
-
-            if (slug.length < 2) {
-                preview.text(slug || '(too short)').removeClass('valid').addClass('invalid');
-                createBtn.prop('disabled', true);
-                error.removeClass('d-none').text('Project name must result in a slug of at least 2 characters.');
-                return;
-            }
-
-            preview.text(slug).removeClass('invalid').addClass('valid');
-            error.addClass('d-none');
-            createBtn.prop('disabled', false);
-        });
-
-        $('#newProjectNameInput').on('keydown', function(e) {
-            if (e.which === 13 && !$('#createProjectBtn').prop('disabled')) {
-                $('#createProjectBtn').click();
-            }
-        });
-
-        $('#createProjectBtn').click(function() {
-            const slug = toSlug($('#newProjectNameInput').val());
-            if (!slug) return;
-
-            bootstrap.Modal.getInstance(document.getElementById('newProjectModal')).hide();
-            
-            const select = $('#projectSelect');
-            if (select.find(`option[value="${slug}"]`).length === 0) {
-                select.append(`<option value="${slug}">${slug}</option>`);
-            }
-            select.val(slug);
-            loadProjectState();
-
-            const desc = $('#newProjectDesc').val().trim();
-            const note = desc ? ` — <em>${desc}</em>` : '';
-            $('#chatHistory').append(
-                `<div class="message system">🗂️ New project created: <strong>${slug}</strong>${note}</div>`
-            );
-            scrollChat();
-            loadProjectsList(slug);
-        });
-
-        function loadProjectState() {
-            const project = getProject();
-            
-            $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
-                const list = $('#fileList');
-                list.empty();
-                if (!data.files || data.files.length === 0) {
-                    list.append('<li><i class="text-white-50 ps-2">No files yet</i></li>');
-                } else {
-                    data.files.forEach(file => {
-                        list.append(`<li class="file-item mb-1" data-file="${file}">📄 ${file}</li>`);
-                    });
-                }
-            });
-
-            // Load project brain context
-            $.get(`${API_BASE}/project-brain?project_name=${project}`, function(brain) {
-                $('#briefGoal').val(brain.goal || '');
-                $('#briefStack').val(brain.stack || '');
-                $('#briefNotes').val(brain.notes || '');
-                const stepsList = $('#briefSteps');
-                stepsList.empty();
-                if (brain.completed_steps && brain.completed_steps.length > 0) {
-                    brain.completed_steps.forEach(step => {
-                        stepsList.append(`<li>✓ ${step}</li>`);
-                    });
-                } else {
-                    stepsList.append('<li><i style="color:#585b70;">No steps run yet</i></li>');
-                }
-            });
-
-            $.get(`${API_BASE}/history?project_name=${project}`, function(data) {
-                const chat = $('#chatHistory');
-                chat.empty();
-                chat.append(`<div class="message system">Loaded project: ${project}</div>`);
-                
-                if (data.history) {
-                    data.history.forEach(msg => {
-                        if (msg.role === 'user') {
-                            chat.append(`<div class="message user">${renderMarkdown(msg.content)}</div>`);
-                        } else if (msg.role === 'assistant') {
-                            let html = buildToolCallCards(msg._tool_calls);
-                            html += renderMarkdown(msg.content);
-                            html += buildMetricsBar(msg._metrics);
-                            const msgEl = $(`<div class="message agent">${html}</div>`);
-                            msgEl.find('pre code').each(function() {
-                                hljs.highlightElement(this);
-                            });
-                            chat.append(msgEl);
-
-                            if (msg.pending_approval && msg.tool_calls) {
-                                const approvalCardHtml = buildToolApprovalCard(msg.tool_calls);
-                                chat.append(approvalCardHtml);
-                            }
-                        }
-                    });
-                }
-                scrollChat();
-            });
-        }
-
-        // Save Project Memory / Brain
-        $('#saveBriefBtn').click(function() {
-            const project = getProject();
-            const payload = {
-                project_name: project,
-                goal: $('#briefGoal').val().trim(),
-                stack: $('#briefStack').val().trim(),
-                notes: $('#briefNotes').val().trim(),
-                completed_steps: []
-            };
-
-            // Grab existing steps so we don't clear them
-            $('#briefSteps li').each(function() {
-                const txt = $(this).text().replace(/^✓\s+/, '').trim();
-                if (txt && !txt.includes("No steps run yet")) {
-                    payload.completed_steps.push(txt);
-                }
-            });
-
-            const status = $('#briefStatus');
-            $.ajax({
-                url: `${API_BASE}/project-brain`,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(payload),
-                success: function() {
-                    status.fadeIn(200).delay(1500).fadeOut(200);
-                }
-            });
-        });
-
-        $('#refreshFilesBtn').click(loadProjectState);
-
-        $(document).on('click', '.file-item', function() {
-            const file = $(this).data('file');
-            const project = getProject();
-            $.get(`${API_BASE}/files/${file}?project_name=${project}`, function(data) {
-                // Detect language from file extension for syntax highlighting
-                const ext = file.split('.').pop().toLowerCase();
-                const extToLang = {
-                    py: 'python', js: 'javascript', ts: 'typescript', jsx: 'javascript',
-                    tsx: 'typescript', html: 'html', css: 'css', json: 'json',
-                    md: 'markdown', sh: 'bash', yml: 'yaml', yaml: 'yaml',
-                    toml: 'toml', rs: 'rust', go: 'go', java: 'java',
-                    cpp: 'cpp', c: 'c', cs: 'csharp', rb: 'ruby',
-                    php: 'php', sql: 'sql', xml: 'xml', txt: 'plaintext',
-                    dockerfile: 'dockerfile',
-                };
-                const lang = extToLang[ext] || 'plaintext';
-
-                // Build title with badge
-                $('#fileModalTitle').html(
-                    `${file}<span class="file-ext-badge">.${ext}</span>`
-                );
-
-                const codeEl = document.getElementById('fileModalContent');
-                codeEl.textContent = data.content;
-                codeEl.className = `language-${lang}`;
-                // Reset hljs state so it re-highlights
-                delete codeEl.dataset.highlighted;
-                if (lang !== 'plaintext' && hljs.getLanguage(lang)) {
-                    hljs.highlightElement(codeEl);
-                } else {
-                    hljs.highlightElement(codeEl);
-                }
-
-                new bootstrap.Modal(document.getElementById('fileModal')).show();
-            });
-        });
-
-        $('#viewDiffBtn').click(function() {
-            const project = getProject();
-            $.get(`${API_BASE}/diff?project_name=${project}`, function(data) {
-                if (!data.diff) {
-                    $('#diffModalContent').html('<p>No changes detected.</p>');
-                } else {
-                    $('#diffModalContent').empty();
-                    const diffHtml = new Diff2HtmlUI(document.getElementById('diffModalContent'), data.diff, {
-                        drawFileList: true,
-                        matching: 'lines',
-                        outputFormat: 'line-by-line'
-                    });
-                    diffHtml.draw();
-                }
-                new bootstrap.Modal(document.getElementById('diffModal')).show();
-            });
-        });
-
-        $('#commitBtn').click(function() {
-            const project = getProject();
-            $.ajax({
-                url: `${API_BASE}/commit`,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ project_name: project }),
-                success: function() {
-                    alert("Changes committed to local git repo!");
-                }
-            });
-        });
-
-        // ── Prompt history (terminal-style ↑/↓ navigation) ──────────────────
-        const promptHistory = [];
-        let historyCursor = -1;   // -1 = not navigating, points to current position
-        let historyDraft  = '';   // saves the live draft when user presses ↑
-
-        $('#chatForm').submit(function(e) {
-            e.preventDefault();
-            const msg = $('#chatInput').val().trim();
-            const model = $('#modelSelect').val();
-            const project = getProject();
-            
-            if (!msg || !model) return;
-
-            // Push to history and reset cursor
-            promptHistory.push(msg);
-            historyCursor = -1;
-            historyDraft  = '';
-
-            $('#chatHistory').append(`<div class="message user">${renderMarkdown(msg)}</div>`);
-            $('#chatInput').val('');
-            
-            const loadingId = 'loading-' + Date.now();
-            $('#chatHistory').append(`
-                <div class="message agent" id="${loadingId}">
-                    <div class="thinking-bubble">
-                        <div class="thinking-title">
-                            <span>🧠 Chege is thinking</span>
-                            <div class="pulse-loader">
-                                <div class="pulse-dot"></div>
-                                <div class="pulse-dot"></div>
-                                <div class="pulse-dot"></div>
-                            </div>
-                        </div>
-                        <div class="skeleton-lines">
-                            <div class="skeleton-line long"></div>
-                            <div class="skeleton-line medium"></div>
-                            <div class="skeleton-line short"></div>
-                        </div>
-                    </div>
-                </div>
-            `);
-            scrollChat();
-
-            $.ajax({
-                url: `${API_BASE}/chat`,
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    model: model,
-                    message: msg,
-                    project_name: project,
-                    enabled_tools: getEnabledTools()
-                }),
-                success: function(response) {
-                    $(`#${loadingId}`).remove();
-                    handleChatResponse(response);
-                },
-                error: function() {
-                    $(`#${loadingId}`).text("Error communicating with backend.");
-                }
-            });
-        });
-
-        $('#chatInput').keydown(function(e) {
-            const input = $(this);
-            const val   = input.val();
-
-            // Enter → send (unless Shift held for newline)
-            if (e.keyCode === 13 && !e.shiftKey) {
-                e.preventDefault();
-                $('#chatForm').submit();
-                return;
-            }
-
-            // ↑ arrow — go back in history
-            if (e.keyCode === 38) {
-                if (promptHistory.length === 0) return;
-                // Only intercept when the field is empty OR we are already in history mode
-                if (val !== '' && historyCursor === -1) return;
-                e.preventDefault();
-                if (historyCursor === -1) {
-                    // Save whatever is currently typed as a draft
-                    historyDraft  = val;
-                    historyCursor = promptHistory.length - 1;
-                } else if (historyCursor > 0) {
-                    historyCursor--;
-                }
-                input.val(promptHistory[historyCursor]);
-                // Move caret to end
-                const len = input.val().length;
-                this.setSelectionRange(len, len);
-                return;
-            }
-
-            // ↓ arrow — go forward in history
-            if (e.keyCode === 40) {
-                if (historyCursor === -1) return;   // not in history mode
-                e.preventDefault();
-                if (historyCursor < promptHistory.length - 1) {
-                    historyCursor++;
-                    input.val(promptHistory[historyCursor]);
-                } else {
-                    // Reached the end — restore the draft
-                    historyCursor = -1;
-                    input.val(historyDraft);
-                }
-                const len = input.val().length;
-                this.setSelectionRange(len, len);
-                return;
-            }
-
-            // Any other key while navigating → exit history mode, keep current text
-            if (historyCursor !== -1 && e.keyCode !== 38 && e.keyCode !== 40) {
-                historyCursor = -1;
-                historyDraft  = '';
-            }
-        });
-    });
-</script>
+<script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+<script src="/assets/vendor/adminlte.min.js"></script>
+<script src="/assets/app.js"></script>
 </body>
 </html>

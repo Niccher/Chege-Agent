@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/assets/chege.svg">
+  <link rel="alternate icon" href="/assets/chege.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/chege-192.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('lte-theme') || 'light';
+        if (t === 'auto') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        t = t === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <title>System status — Chege Agent</title>
+  <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
+  <link rel="stylesheet" href="/assets/vendor/all.min.css">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="hold-transition layout-fixed fixed-header sidebar-expand-lg">
+<div class="app-wrapper">
+  <div id="chege-navbar"></div><div id="chege-sidebar"></div>
+  <main class="app-main">
+    <section class="app-content-header"><div class="container-fluid">
+      <h1 class="m-0">System status</h1>
+      <p class="text-muted mb-0">Live view of this instance — refreshed on load and every 15 seconds.</p>
+    </div></section>
+
+    <section class="app-content"><div class="container-fluid">
+      <div class="chege-status-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+          <span class="chege-badge"><i class="fas fa-house-lock"></i> Loopback only · no authentication</span>
+          <h2 class="mt-3 mb-1" id="overall-label">Checking services…</h2>
+          <p id="overall-detail">Reading health and readiness probes.</p>
+        </div>
+        <div class="text-end">
+          <div class="small" id="last-checked">—</div>
+          <button id="refresh-status" class="btn btn-sm btn-light mt-2">
+            <i class="fas fa-rotate"></i> Refresh now
+          </button>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-6 col-xl-3">
+          <div class="chege-metric-card">
+            <div class="chege-metric-top">
+              <div><div class="chege-metric-label">Service health</div><div class="chege-metric-value" id="health-label">—</div></div>
+              <div class="chege-metric-icon"><i class="fas fa-heart-pulse"></i></div>
+            </div>
+            <div class="chege-metric-foot"><code>/healthz</code></div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="chege-metric-card">
+            <div class="chege-metric-top">
+              <div><div class="chege-metric-label">Readiness</div><div class="chege-metric-value" id="ready-label">—</div></div>
+              <div class="chege-metric-icon"><i class="fas fa-circle-check"></i></div>
+            </div>
+            <div class="chege-metric-foot"><code>/readyz</code></div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="chege-metric-card">
+            <div class="chege-metric-top">
+              <div><div class="chege-metric-label">Database</div><div class="chege-metric-value" id="db-label">—</div></div>
+              <div class="chege-metric-icon"><i class="fas fa-database"></i></div>
+            </div>
+            <div class="chege-metric-foot" id="db-detail">Loading settings…</div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="chege-metric-card">
+            <div class="chege-metric-top">
+              <div><div class="chege-metric-label">Tools registered</div><div class="chege-metric-value" id="tool-count">—</div></div>
+              <div class="chege-metric-icon"><i class="fas fa-screwdriver-wrench"></i></div>
+            </div>
+            <div class="chege-metric-foot"><code>/api/v1/tools</code></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="chege-status-card h-100">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-microchip chege-section-icon"></i>Runtime</h3></div>
+            <div class="card-body" id="runtime-info">
+              <div class="chege-status-row"><span>Loading…</span><span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="chege-status-card h-100">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-plug chege-section-icon"></i>Providers</h3></div>
+            <div class="card-body p-0">
+              <table class="table table-sm m-0">
+                <thead><tr><th>Provider</th><th>Endpoint</th><th>State</th></tr></thead>
+                <tbody id="provider-rows">
+                  <tr><td colspan="3" class="text-muted">Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-lg-7">
+          <div class="chege-status-card h-100">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-list-check chege-section-icon"></i>Available tools</h3></div>
+            <div class="card-body">
+              <div id="tool-badges" class="text-muted small">Loading…</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <div class="chege-status-card h-100">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-arrow-up-right-from-square chege-section-icon"></i>Quick links</h3></div>
+            <div class="card-body d-grid gap-2">
+              <a class="btn btn-sm btn-outline-primary" href="/app"><i class="fas fa-terminal"></i> Open playground</a>
+              <a class="btn btn-sm btn-outline-primary" href="/settings"><i class="fas fa-sliders"></i> Settings console</a>
+              <a class="btn btn-sm btn-outline-secondary" href="/docs" target="_blank" rel="noopener"><i class="fas fa-book"></i> Swagger UI</a>
+              <a class="btn btn-sm btn-outline-secondary" href="/api/v1/openapi.json" target="_blank" rel="noopener"><i class="fas fa-code"></i> OpenAPI JSON</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></section>
+  </main>
+  <div id="chege-footer"></div>
+</div>
+
+<script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+<script src="/assets/vendor/adminlte.min.js"></script>
+<script src="/assets/app.js"></script>
+<script>
+  Chege.shell('/status');
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => Chege.escapeHtml(value);
+
+  function badge(text, kind) {
+    return `<span class="chege-status-badge is-${kind || ''}">${esc(text)}</span>`;
+  }
+
+  function runtimeRow(label, value) {
+    return `<div class="chege-status-row"><span>${esc(label)}</span><span>${esc(value == null || value === '' ? '—' : value)}</span></div>`;
+  }
+
+  async function fetchJson(path) {
+    const res = await fetch(path, { cache: 'no-store' });
+    if (!res.ok) throw new Error(path + ' returned HTTP ' + res.status);
+    return res.json();
+  }
+
+  function setHealth(label, detail, kind) {
+    $('overall-label').textContent = label;
+    $('overall-detail').textContent = detail;
+    $('health-label').innerHTML = badge(kind === 'ok' ? 'OK' : kind === 'bad' ? 'Offline' : 'Degraded',
+      kind === 'ok' ? 'ok' : kind === 'bad' ? 'bad' : 'warn');
+  }
+
+  async function refreshStatus() {
+    $('last-checked').textContent = 'Checking…';
+    let healthy = false;
+    let ready = false;
+
+    try {
+      const h = await fetchJson('/healthz');
+      healthy = h.status === 'ok';
+      $('health-label').innerHTML = badge(healthy ? 'OK' : 'Degraded', healthy ? 'ok' : 'warn');
+    } catch (e) {
+      $('health-label').innerHTML = badge('Offline', 'bad');
+    }
+
+    try {
+      const r = await fetchJson('/readyz');
+      ready = r.status === 'ready';
+      $('ready-label').innerHTML = badge(ready ? 'Ready' : 'Not ready', ready ? 'ok' : 'warn');
+    } catch (e) {
+      $('ready-label').innerHTML = badge('Unavailable', 'bad');
+    }
+
+    setHealth(
+      healthy && ready ? 'All systems operational' : healthy ? 'Degraded' : 'Service unavailable',
+      healthy && ready ? 'API and readiness probes are responding normally.'
+                       : 'One or more core probes are not responding. Check the container logs.',
+      healthy && ready ? 'ok' : healthy ? 'warn' : 'bad'
+    );
+
+    try {
+      const s = await Chege.api('/settings');
+      const dsn = s.database_url || '';
+      const database = dsn.startsWith('postgres') ? 'Postgres' : 'SQLite';
+      $('db-label').textContent = database;
+      $('db-detail').textContent = dsn.startsWith('postgres') ? 'Internal container · no host port' : 'Embedded file · data/chege.db';
+      $('runtime-info').innerHTML = [
+        runtimeRow('Version', s.version),
+        runtimeRow('Default provider', s.default_provider),
+        runtimeRow('Sandbox backend', s.sandbox_backend),
+        runtimeRow('Max steps', s.max_steps),
+        runtimeRow('Context window', s.default_context_window),
+        runtimeRow('Run timeout', s.run_timeout_seconds ? s.run_timeout_seconds + 's' : '—'),
+        runtimeRow('Database DSN', dsn || 'embedded SQLite'),
+        runtimeRow('Host binding', s.host + ':' + s.port)
+      ].join('');
+    } catch (e) {
+      $('runtime-info').innerHTML = runtimeRow('Error', e.message);
+      $('db-detail').textContent = e.message;
+    }
+
+    try {
+      const p = await Chege.api('/providers');
+      $('provider-rows').innerHTML = (p.providers || []).map((x) => `
+        <tr>
+          <td><strong>${esc(x.label || x.name)}</strong>${x.is_active ? ' ' + badge('active', 'ok') : ''}</td>
+          <td><code>${esc(x.url || '')}</code></td>
+          <td>${badge(x.is_active ? 'Default' : 'Configured', x.is_active ? 'ok' : '')}</td>
+        </tr>`).join('');
+    } catch (e) {
+      $('provider-rows').innerHTML = `<tr><td colspan="3">${esc(e.message)}</td></tr>`;
+    }
+
+    try {
+      const t = await Chege.api('/tools');
+      const tools = t.tools || [];
+      $('tool-count').textContent = String(tools.length);
+      $('tool-badges').innerHTML = tools.map((x) =>
+        `<span class="metric-pill">${esc(x.name)} · ${esc(x.risk)}</span>`).join('');
+    } catch (e) {
+      $('tool-count').textContent = '—';
+      $('tool-badges').textContent = e.message;
+    }
+
+    $('last-checked').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  }
+
+  $('refresh-status').addEventListener('click', refreshStatus);
+  refreshStatus();
+  setInterval(refreshStatus, 15000);
+</script>
+</body>
+</html>

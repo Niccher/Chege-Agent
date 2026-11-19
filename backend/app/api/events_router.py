@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from backend.app.db.database import create_session
 from backend.app.events.manager import EventManager, get_event_manager
-from backend.app.security.auth import verify_auth_token
 
 router = APIRouter(prefix="/runs", tags=["events"])
 
@@ -15,7 +14,6 @@ async def stream_run_events(
     run_id: str,
     after: int = Query(default=0, description="Replay events strictly after this sequence number (RT-01)"),
     event_mgr: EventManager = Depends(get_event_manager),
-    token: str = Depends(verify_auth_token),
 ):
     """
     Server-Sent Events endpoint streaming real-time tokens, tool outputs, and status (RT-01).

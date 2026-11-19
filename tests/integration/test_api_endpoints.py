@@ -20,50 +20,47 @@ def test_client(tmp_path: Path, monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "data_dir", tmp_path / "data")
     monkeypatch.setattr(settings, "workdir", tmp_path / "workdir")
-    monkeypatch.setattr(settings, "auth_enabled", True)
-    monkeypatch.setattr(settings, "auth_token", "test-secret-token")
 
     app = create_app()
     app.dependency_overrides[get_db_session] = override_get_db
     with TestClient(app) as client:
-        yield client, "test-secret-token"
+        yield client
 
 
-def test_healthz_unauthenticated(test_client):
-    client, _ = test_client
+def test_healthz(test_client):
+    client = test_client
     resp = client.get("/healthz")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
 
-def test_auth_rejection(test_client):
-    client, _ = test_client
-    resp = client.get("/api/projects")
-    assert resp.status_code == 401
+def test_api_is_locally_accessible(test_client):
+    client = test_client
+    resp = client.get("/api/v1/projects")
+    assert resp.status_code == 200
 
 
-def test_project_crud_authenticated(test_client):
-    client, token = test_client
-    headers = {"Authorization": f"Bearer {token}"}
+def test_project_crud(test_client):
+    client = test_client
 
     # 1. Create project
     create_resp = client.post(
-        "/api/projects",
-        headers=headers,
+        "/api/v1/projects",
         json={"name": "Demo Calculator", "goal": "Build CLI calc", "stack": "Python"},
     )
-    assert create_resp.status_code == 200
+    assert create_resp.status_code == 201
+    assert create_resp.headers["location"] == "/api/v1/projects/Demo-Calculator"
     data = create_resp.json()
     assert data["project"]["slug"] == "Demo-Calculator"
 
     # 2. List projects
-    list_resp = client.get("/api/projects", headers=headers)
+    list_resp = client.get("/api/v1/projects")
     assert list_resp.status_code == 200
     projects = list_resp.json()["projects"]
     assert any(p["slug"] == "Demo-Calculator" for p in projects)
 
     # 3. List sessions for project
-    sess_resp = client.get("/api/sessions/by-project/Demo-Calculator", headers=headers)
+    sess_resp = client.get("/api/v1/sessions/by-project/Demo-Calculator")
     assert sess_resp.status_code == 200
     sessions = sess_resp.json()["sessions"]
     assert len(sessions) >= 1

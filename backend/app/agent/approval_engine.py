@@ -1,8 +1,8 @@
 import json
-import re
+import shlex
 from typing import Any
-from sqlmodel import Session, select
-from backend.app.db.models import ApprovalPolicy, ToolCall
+from sqlmodel import Session
+from backend.app.db.models import ToolCall
 from backend.app.tools.base import BaseTool, RiskLevel
 
 
@@ -16,46 +16,79 @@ class ApprovalEngine:
     """
     Evaluates whether a proposed tool call requires user approval based
     on risk classification and project policies (AGT-07, AGT-08).
+
+    ``auto_edit`` allows ordinary file writes and a small set of *exact*
+    command argv tuples. Regex prefixes were replaced because patterns like
+    ``^pytest(\\s+.*)?$`` accepted shell metacharacters such as
+    ``pytest ; cat ~/.env``.
     """
+
+    # Exact argv tuples only — extra flags require explicit approval.
+    _SAFE_ARGV = {
+        ("pytest",),
+        ("python", "-m", "unittest"),
+        ("python3", "-m", "unittest"),
+        ("git", "status"),
+        ("git", "diff"),
+        ("git", "log"),
+        ("npm", "test"),
+        ("npm", "run", "lint"),
+    }
+
+    # Destructive writes stay gated even under auto_edit.
+    _DESTRUCTIVE_TOOLS = {"delete_file", "git_commit", "process_kill"}
+
+    _SHELL_TOKENS = {";", "&&", "||", "|", "`", ">", ">>", "<"}
 
     def __init__(self, db: Session, project_id: str, policy_mode: str = "auto_edit"):
         self.db = db
         self.project_id = project_id
         self.policy_mode = policy_mode  # ask_all, auto_edit, full_auto
-        self._command_allowlist = [
-            re.compile(r"^pytest(\s+.*)?$"),
-            re.compile(r"^npm\s+(test|run\s+lint)(\s+.*)?$"),
-            re.compile(r"^python3?\s+-m\s+unittest(\s+.*)?$"),
-            re.compile(r"^git\s+(status|diff|log)(\s+.*)?$"),
-        ]
+
+    def _is_safe_command(self, command: str) -> bool:
+        try:
+            argv = shlex.split(command)
+        except ValueError:
+            return False
+        if not argv:
+            return False
+        if any(token in self._SHELL_TOKENS for token in argv):
+            return False
+        if any(any(c in token for c in ("$", "`")) for token in argv):
+            return False
+        return tuple(argv) in self._SAFE_ARGV
 
     def evaluate(self, tool: BaseTool, args: dict[str, Any]) -> ApprovalDecision:
-        # 1. READ tools are always safe
+        # 1. READ tools are always safe.
         if tool.risk == RiskLevel.READ:
             return ApprovalDecision(requires_approval=False, reason="Read-only operation")
 
-        # 2. Check policy mode
+        # 2. Explicit full-auto is the only mode that bypasses all gates.
         if self.policy_mode == "full_auto":
             return ApprovalDecision(requires_approval=False, reason="Full Auto policy enabled")
 
         if self.policy_mode == "ask_all":
             return ApprovalDecision(requires_approval=True, reason="Ask Everything policy active")
 
-        # 3. Default "auto_edit": WRITE is allowed, EXEC and NETWORK require approval
-        if self.policy_mode == "auto_edit":
-            if tool.risk == RiskLevel.WRITE:
-                return ApprovalDecision(requires_approval=False, reason="File writes allowed under auto_edit")
+        # 3. Destructive operations always require confirmation under auto_edit.
+        if tool.name in self._DESTRUCTIVE_TOOLS:
+            return ApprovalDecision(
+                requires_approval=True,
+                reason=f"Destructive action '{tool.name}' requires explicit confirmation",
+            )
 
-            # Check if command matches safe command allowlist
-            if tool.name == "run_command":
-                cmd = args.get("command", "").strip()
-                for pattern in self._command_allowlist:
-                    if pattern.match(cmd):
-                        return ApprovalDecision(requires_approval=False, reason="Command is in safe allowlist")
+        # 4. Ordinary file writes are allowed under auto_edit.
+        if tool.risk == RiskLevel.WRITE:
+            return ApprovalDecision(requires_approval=False, reason="File writes allowed under auto_edit")
 
-            return ApprovalDecision(requires_approval=True, reason=f"High-risk action ({tool.risk.value}) requires explicit confirmation")
+        # 5. Commands must match an exact, shell-free argv tuple.
+        if tool.name == "run_command" and self._is_safe_command(args.get("command", "")):
+            return ApprovalDecision(requires_approval=False, reason="Command is in safe allowlist")
 
-        return ApprovalDecision(requires_approval=True, reason="Default confirmation required")
+        return ApprovalDecision(
+            requires_approval=True,
+            reason=f"High-risk action ({tool.risk.value}) requires explicit confirmation",
+        )
 
     def create_pending_tool_call(self, run_id: str, tool: BaseTool, args: dict[str, Any]) -> ToolCall:
         tc = ToolCall(

@@ -45,10 +45,9 @@ When running outside Docker, instruct Chege Agent to use the local process sandb
 Create a `.env` file:
 ```ini
 CHEGE_HOST=127.0.0.1
-CHEGE_PORT=9100
+CHEGE_PORT=8000
 CHEGE_SANDBOX_BACKEND=local
 CHEGE_OLLAMA_URL=http://127.0.0.1:11434
-CHEGE_AUTH_ENABLED=false
 ```
 
 ---
@@ -58,11 +57,11 @@ CHEGE_AUTH_ENABLED=false
 Start Uvicorn with auto-reload:
 
 ```bash
-uvicorn backend.app.main:app --host 127.0.0.1 --port 9100 --reload
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 The server will automatically reload when files in `backend/app/` or `webui/` are modified.
 
 Visit:
-- Web UI: [http://127.0.0.1:9100](http://127.0.0.1:9100)
-- OpenAPI Documentation: [http://127.0.0.1:9100/docs](http://127.0.0.1:9100/docs)
+- Web UI: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- OpenAPI Documentation: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)

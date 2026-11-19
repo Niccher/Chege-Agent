@@ -1,6 +1,8 @@
 # Threat Model & Security Hardening
 
-Chege Agent executes code and runs automated tools on behalf of users. Security isolation is therefore a foundational requirement.
+Chege Agent executes code and runs automated tools on behalf of a single local user. Security isolation is therefore a foundational requirement.
+
+**Deployment assumption:** Chege Agent has no authentication, users, or tenants. It must bind to `127.0.0.1` and must not be exposed directly to untrusted networks. Network-level access control (firewall, SSH tunnel) is the operator's responsibility.
 
 ---
 
@@ -8,8 +10,8 @@ Chege Agent executes code and runs automated tools on behalf of users. Security 
 
 | Threat | Target | Vector | Mitigation in Chege Agent |
 |---|---|---|---|
-| **Spoofing** | API Endpoints | Unauthenticated caller accessing runs or project files. | Bearer token authentication (`Authorization: Bearer <token>`, `X-Chege-Token`, and `chege_token` HttpOnly cookie) with timing-safe comparison (`secrets.compare_digest`). |
-| **Tampering** | Host Filesystem | Agent or malicious prompt escaping workspace to modify host files (`../../etc/passwd`). | Strict path canonicalization (`_safe_path`) verifying that target paths resolve within `/app/workdir/{project_slug}`. |
+| **Spoofing** | API Endpoints | Untrusted process on the host reaching local runs or project files. | Out of scope for the app: loopback binding (`CHEGE_HOST=127.0.0.1`) plus OS firewall / SSH tunnel. No in-app auth by design. |
+| **Tampering** | Host Filesystem | Agent or malicious prompt escaping workspace to modify host files (`../../etc/passwd`). | Strict path canonicalization (`resolve_in`) verifying that target paths resolve within `/app/workdir/{project_slug}`. |
 | **Repudiation** | Tool Execution | Untracked file alterations or destructive shell commands. | Every tool call is recorded in `tool_calls` table and committed to the workspace Git repository (`git_commit`). |
 | **Information Disclosure** | Host Network / Docker API | Prompt injection requesting container or Docker host credentials. | Unprivileged `tecnativa/docker-socket-proxy` blocks access to sensitive Docker API endpoints (`NETWORKS=0`, `VOLUMES=0`). |
 | **Denial of Service** | Agent Loop & CPU | Infinite recursive tool-call loops or commands that hang. | `LoopGuard` terminates runs with repetitive actions; command timeouts (`timeout=30s`) prevent indefinite blocking. |
@@ -41,8 +43,9 @@ chege-docker-proxy:
 ## 3. Sandboxing Modes
 
 1. **`docker` (Production Default)**:
-   - Each project workspace runs inside an ephemeral sandbox container (`chege-sandbox-polyglot:latest`).
-   - Network isolation prevents sandbox processes from reaching internal cloud metadata endpoints or private LAN resources.
-2. **`local` (Dev Mode)**:
-   - Executes commands directly on the host using `subprocess.run` with path constraints.
-   - Designed strictly for local workstation development (`docker-compose.dev.yml`).
+   - The agent talks to the proxy at `tcp://docker-socket-proxy:2375` using the Docker SDK.
+   - Each project workspace is bind-mounted into a container built from `sandbox/Dockerfile`, with `--network none`, UID `10001`, all capabilities dropped, a read-only root filesystem, tmpfs `/tmp`, and PID/memory/CPU limits.
+   - If the proxy or image is unavailable the run fails loudly. There is no silent local fallback.
+2. **`local` (Explicit opt-in)**:
+   - Executes commands directly with path constraints and process tracking.
+   - Enabled only with `bash scripts/deploy.sh --local-sandbox` or `CHEGE_SANDBOX_BACKEND=local`; there is no process isolation in this mode.

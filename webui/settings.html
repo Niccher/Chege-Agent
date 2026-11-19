@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/assets/chege.svg">
+  <link rel="alternate icon" href="/assets/chege.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/chege-192.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('lte-theme') || 'light';
+        if (t === 'auto') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        t = t === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <title>Settings console — Chege Agent</title>
+  <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
+  <link rel="stylesheet" href="/assets/vendor/all.min.css">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="hold-transition layout-fixed fixed-header sidebar-expand-lg">
+<div class="app-wrapper">
+  <div id="chege-navbar"></div><div id="chege-sidebar"></div>
+  <main class="app-main">
+    <section class="app-content-header"><div class="container-fluid">
+      <h1 class="m-0">Settings console</h1>
+      <p class="text-muted mb-0">One place for defaults, provider endpoints, sandbox and agent limits.</p>
+    </div></section>
+
+    <section class="app-content"><div class="container-fluid">
+      <div id="chege-alerts"></div>
+
+      <div class="chege-status-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+          <span class="chege-badge"><i class="fas fa-sliders"></i> Single-user · local-only</span>
+          <h2 class="mt-3 mb-1">Current defaults</h2>
+          <p id="settings-summary">Loading runtime settings…</p>
+        </div>
+        <div class="text-end">
+          <div class="small" id="settings-source">Reading /api/v1/settings</div>
+          <a href="/setup" class="btn btn-sm btn-light mt-2"><i class="fas fa-book"></i> Setup guide</a>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="chege-settings-card h-100">
+            <div class="card-header">
+              <h3 class="mb-0"><i class="fas fa-palette chege-section-icon"></i>Appearance</h3>
+              <span class="chege-status-badge">This browser</span>
+            </div>
+            <div class="card-body">
+              <p class="text-muted small">Stored locally in this browser and applied before the page paints on every page.</p>
+              <div class="d-flex flex-wrap gap-2" role="group" aria-label="Theme">
+                <button type="button" class="btn btn-sm btn-outline-secondary chege-theme-choice" data-bs-theme-value="light" aria-pressed="false">
+                  <i class="fas fa-sun"></i> Light
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary chege-theme-choice" data-bs-theme-value="dark" aria-pressed="false">
+                  <i class="fas fa-moon"></i> Dark
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary chege-theme-choice" data-bs-theme-value="auto" aria-pressed="false">
+                  <i class="fas fa-circle-half-stroke"></i> System
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="chege-settings-card h-100">
+            <div class="card-header">
+              <h3 class="mb-0"><i class="fas fa-shield-halved chege-section-icon"></i>Sandbox</h3>
+              <span class="chege-status-badge">Runtime</span>
+            </div>
+            <div class="card-body">
+              <label class="form-label" for="sandbox_backend">Sandbox backend</label>
+              <select id="sandbox_backend" class="form-select">
+                <option value="docker">docker — isolated per-project container (recommended)</option>
+                <option value="local">local — no process isolation (explicit opt-in only)</option>
+              </select>
+              <span class="chege-setting-help">Use <code>docker</code> unless you are developing natively. The app never publishes a host port.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chege-settings-card mt-3">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-plug chege-section-icon"></i>Providers &amp; models</h3>
+          <span class="chege-status-badge" id="active-provider-badge">—</span>
+        </div>
+        <div class="card-body">
+          <div class="chege-setting-grid">
+            <div>
+              <label class="form-label" for="default_provider">Default provider</label>
+              <select id="default_provider" class="form-select">
+                <option value="llama_cpp">llama.cpp (local, recommended)</option>
+                <option value="ollama">Ollama (local)</option>
+                <option value="openai">OpenAI / compatible</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" for="llamacpp_url">llama.cpp endpoint</label>
+              <input id="llamacpp_url" class="form-control" placeholder="http://host.docker.internal:8080/v1">
+              <span class="chege-setting-help">Precompiled llama-server on the host, reachable from the container.</span>
+            </div>
+            <div>
+              <label class="form-label" for="ollama_url">Ollama endpoint</label>
+              <input id="ollama_url" class="form-control" placeholder="http://host.docker.internal:11434">
+            </div>
+            <div>
+              <label class="form-label" for="openai_base_url">OpenAI-compatible base URL</label>
+              <input id="openai_base_url" class="form-control" placeholder="https://api.openai.com/v1">
+            </div>
+            <div class="full">
+              <label class="form-label" for="openai_api_key">OpenAI API key</label>
+              <input id="openai_api_key" class="form-control" type="password" autocomplete="off" placeholder="Leave the masked value unchanged to keep it">
+              <span class="chege-setting-help">Stored with 0600 permissions in <code>data/settings.json</code> and never returned unmasked by the API.</span>
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button id="test-llamacpp" class="btn btn-sm btn-outline-primary" type="button"><i class="fas fa-plug-circle-check"></i> Test llama.cpp</button>
+            <button id="test-ollama" class="btn btn-sm btn-outline-primary" type="button"><i class="fas fa-plug-circle-check"></i> Test Ollama</button>
+            <button id="test-openai" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-cloud"></i> Test OpenAI</button>
+            <button id="load-models" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-list"></i> List models</button>
+          </div>
+          <div id="provider-test-result" class="chege-test-result mt-3">No provider test run yet.</div>
+          <div id="model-list" class="mt-2 small text-muted"></div>
+        </div>
+      </div>
+
+      <div class="chege-settings-card mt-3">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-gauge-high chege-section-icon"></i>Agent defaults</h3>
+          <span class="chege-status-badge">Applied to new runs</span>
+        </div>
+        <div class="card-body">
+          <div class="chege-setting-grid">
+            <div>
+              <label class="form-label" for="default_context_window">Context window (tokens)</label>
+              <input id="default_context_window" class="form-control" type="number" min="1024" step="1024">
+            </div>
+            <div>
+              <label class="form-label" for="max_steps">Max agent steps</label>
+              <input id="max_steps" class="form-control" type="number" min="1" step="1">
+            </div>
+            <div class="full">
+              <label class="form-label" for="run_timeout_seconds">Run timeout (seconds)</label>
+              <input id="run_timeout_seconds" class="form-control" type="number" min="10" step="10">
+              <span class="chege-setting-help">The current playground also sends its own step limit when starting a run.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chege-settings-card mt-3">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-server chege-section-icon"></i>Deployment reference</h3>
+          <span class="chege-status-badge">Read-only</span>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <table class="table table-sm m-0">
+                <tbody>
+                  <tr><th>Host binding</th><td><code id="ref-host">—</code></td></tr>
+                  <tr><th>Host port</th><td><code id="ref-port">—</code></td></tr>
+                  <tr><th>Database</th><td><code id="ref-database">—</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="col-md-6">
+              <table class="table table-sm m-0">
+                <tbody>
+                  <tr><th>Data directory</th><td><code id="ref-data">—</code></td></tr>
+                  <tr><th>Workspaces</th><td><code id="ref-workdir">—</code></td></tr>
+                  <tr><th>Logs</th><td><code id="ref-logs">—</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <p class="text-muted small mb-0 mt-3">Host, port and database binding come from <code>.env</code> and the deploy script. Change those with
+            <code>bash scripts/deploy.sh --isolated</code>; the values above are shown for reference and are not edited here.</p>
+        </div>
+      </div>
+
+      <div class="chege-settings-card mt-3">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-floppy-disk chege-section-icon"></i>Apply changes</h3>
+          <span class="chege-status-badge">Choose a save mode</span>
+        </div>
+        <div class="card-body">
+          <div class="callout callout-info mb-3">
+            <b>How saving works.</b> <code>Apply now</code> changes only this running process and is lost on restart.
+            <code>Save as defaults</code> applies the change immediately <i>and</i> writes it to
+            <code>data/settings.json</code>, so it is reloaded on every restart. <code>Clear saved defaults</code>
+            removes that file; the next restart returns to your <code>.env</code> values. API keys are stored with
+            <code>0600</code> permissions and are always masked in responses.
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button id="reset-settings" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-rotate-left"></i> Reset form</button>
+            <button id="clear-defaults" class="btn btn-sm btn-outline-danger" type="button"><i class="fas fa-trash"></i> Clear saved defaults</button>
+            <button id="apply-settings" class="btn btn-sm btn-outline-primary" type="button"><i class="fas fa-bolt"></i> Apply now</button>
+            <button id="save-settings" class="btn btn-sm btn-primary" type="button"><i class="fas fa-floppy-disk"></i> Save as defaults</button>
+          </div>
+        </div>
+      </div>
+    </div></section>
+  </main>
+  <div id="chege-footer"></div>
+</div>
+
+<script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+<script src="/assets/vendor/adminlte.min.js"></script>
+<script src="/assets/app.js"></script>
+<script src="/assets/js/settings.js"></script>
+</body>
+</html>

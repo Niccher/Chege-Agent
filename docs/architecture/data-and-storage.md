@@ -4,9 +4,9 @@ Chege Agent maintains persistent state across project workspaces, conversation s
 
 ---
 
-## 1. Database Schema (SQLite / SQLModel)
+## 1. Database Schema (SQLModel)
 
-Persistent relational data is stored in `./data/chege.db` via SQLModel (SQLAlchemy 2.0 compatible).
+By default persistent relational data is stored in embedded SQLite at `./data/chege.db`. Setting `CHEGE_DATABASE_URL` switches the same SQLModel schema to Postgres; `bash scripts/deploy.sh --with-postgres` starts an internal Postgres container and sets the DSN automatically. The password-bearing DSN is masked in `/api/v1/settings` and on the status page. SQLite-only PRAGMAs (WAL, foreign keys, synchronous NORMAL) are applied only to SQLite engines; Postgres uses `pool_pre_ping`.
 
 ```mermaid
 erDiagram
@@ -94,9 +94,7 @@ erDiagram
 ├── data/
 │   ├── chege.db          # Main SQLite database (WAL mode enabled)
 │   ├── chege.db-shm      # Shared memory file for SQLite WAL
-│   ├── chege.db-wal      # Write-Ahead Log journal
-│   └── secrets/
-│       └── api_token     # Auto-generated API token if CHEGE_AUTH_TOKEN is omitted
+│   └── chege.db-wal      # Write-Ahead Log journal
 ├── workdir/              # Project workspace roots
 │   ├── my-project/       # Each project has its own isolated directory
 │   │   ├── .git/         # Auto-initialized Git version control repository

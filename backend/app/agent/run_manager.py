@@ -144,6 +144,12 @@ class RunManager:
                 settings = get_settings()
                 workspace_root = (settings.workdir / project_rec.slug).resolve()
                 workspace_root.mkdir(parents=True, exist_ok=True)
+
+                # Automatic pre-run checkpoint: every mutating tool that follows
+                # can be undone with POST /api/v1/runs/{id}/revert.
+                from backend.app.agent.checkpoints import CheckpointManager
+                CheckpointManager.create_checkpoint(workspace_root, run_id, project_rec.id, db)
+
                 sandbox = self.sandbox_factory(workspace_root, project_rec.slug)
                 approval_engine = ApprovalEngine(db, project_rec.id, policy_mode)
                 tool_ctx = ToolContext(

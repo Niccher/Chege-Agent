@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/assets/chege.svg">
+  <link rel="alternate icon" href="/assets/chege.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/chege-192.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('lte-theme') || 'light';
+        if (t === 'auto') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        t = t === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', t);
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <title>Playground — Chege Agent</title>
+  <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
+  <link rel="stylesheet" href="/assets/vendor/all.min.css">
+  <link rel="stylesheet" href="/assets/vendor/github-dark.min.css">
+  <link rel="stylesheet" href="/assets/vendor/diff2html.min.css">
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="hold-transition layout-fixed fixed-header sidebar-expand-lg">
+<div class="app-wrapper">
+  <div id="chege-navbar"></div>
+  <div id="chege-sidebar"></div>
+
+  <main class="app-main">
+    <section class="app-content-header">
+      <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h1 class="m-0">Playground</h1>
+            <p class="text-muted mb-0">Chat with your agent, watch it work, inspect the result.</p>
+          </div>
+          <div id="run-status" class="badge bg-secondary"><span class="status-dot status-warn"></span>Idle</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="app-content">
+      <div class="container-fluid" id="chege-alerts"></div>
+      <div class="container-fluid">
+        <div class="row">
+          <!-- Chat -->
+          <div class="col-xl-8 col-lg-7 d-flex flex-column">
+            <div class="card card-primary card-outline chat-card">
+              <div class="card-header border-0">
+                <div class="row align-items-center">
+                  <div class="col-md-5 mb-2 mb-md-0">
+                    <label class="small text-muted mb-0">Project</label>
+                    <select id="project-select" class="form-control form-control-sm"></select>
+                  </div>
+                  <div class="col-md-4 mb-2 mb-md-0">
+                    <label class="small text-muted mb-0">Thread</label>
+                    <select id="session-select" class="form-control form-control-sm"></select>
+                  </div>
+                  <div class="col-md-3">
+                    <button id="new-project-btn" class="btn btn-sm btn-outline-primary" title="Create project"><i class="fas fa-plus"></i> Project</button>
+                    <button id="new-session-btn" class="btn btn-sm btn-outline-secondary" title="New thread"><i class="fas fa-plus"></i> Thread</button>
+                  </div>
+                </div>
+                <div class="row mt-2" id="empty-projects">
+                  <div class="col-md-6"><input id="new-project-name" class="form-control form-control-sm" placeholder="New project name"></div>
+                  <div class="col-md-6"><input id="new-project-goal" class="form-control form-control-sm" placeholder="Goal (optional)"></div>
+                </div>
+              </div>
+
+              <div id="chat-scroll" class="chat-scroll">
+                <div class="empty-state"><i class="fas fa-comments fa-3x mb-3"></i><p>Loading workspace…</p></div>
+              </div>
+
+              <div id="approval-zone" class="px-3 d-none"></div>
+
+              <div class="composer">
+                <div class="composer-row">
+                  <textarea id="prompt-input" class="form-control" placeholder="Ask the agent to build, fix or explain something…"></textarea>
+                  <button id="send-btn" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Send</button>
+                  <button id="cancel-btn" class="btn btn-outline-danger" title="Cancel run"><i class="fas fa-stop"></i></button>
+                </div>
+                <div class="row mt-2 align-items-center">
+                  <div class="col-md-4"><select id="provider-select" class="form-control form-control-sm"></select></div>
+                  <div class="col-md-4"><select id="model-select" class="form-control form-control-sm">
+                    <option value="qwen2.5-coder:latest">qwen2.5-coder:latest</option></select></div>
+                  <div class="col-md-4"><select id="policy-select" class="form-control form-control-sm">
+                    <option value="auto_edit">auto_edit — safe edits automatic</option>
+                    <option value="ask_all">ask_all — confirm everything</option>
+                    <option value="full_auto">full_auto — no prompts (use with care)</option>
+                  </select></div>
+                </div>
+                <div class="small text-muted mt-1"><span id="session-title">Thread</span> ·
+                  <span id="provider-health">providers loading…</span> · Ctrl/⌘+Enter to send</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inspector -->
+          <div class="col-xl-4 col-lg-5">
+            <div class="card card-outline card-info inspector">
+              <div class="card-header p-0">
+                <ul class="nav nav-tabs" role="tablist">
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="files-tab" data-bs-toggle="tab" data-bs-target="#tab-files"
+                            type="button" role="tab" aria-controls="tab-files" aria-selected="true">Files</button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="diff-tab" data-bs-toggle="tab" data-bs-target="#tab-diff"
+                            type="button" role="tab" aria-controls="tab-diff" aria-selected="false">Diff</button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tab-tools"
+                            type="button" role="tab" aria-controls="tab-tools" aria-selected="false">Tools</button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="actions-tab" data-bs-toggle="tab" data-bs-target="#tab-actions"
+                            type="button" role="tab" aria-controls="tab-actions" aria-selected="false">Actions</button>
+                  </li>
+                </ul>
+              </div>
+              <div class="card-body tab-content">
+                <div class="tab-pane fade show active" id="tab-files" role="tabpanel" aria-labelledby="files-tab">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong>Workspace</strong>
+                    <button id="refresh-files" class="btn btn-xs btn-outline-secondary"><i class="fas fa-rotate"></i></button>
+                  </div>
+                  <div id="file-list" class="mb-3"></div>
+                  <div class="small text-muted" id="code-path"></div>
+                  <pre><code id="code-view"></code></pre>
+                </div>
+                <div class="tab-pane fade" id="tab-diff" role="tabpanel" aria-labelledby="diff-tab">
+                  <pre id="diff-view"></pre>
+                </div>
+                <div class="tab-pane fade" id="tab-tools" role="tabpanel" aria-labelledby="tools-tab">
+                  <p class="small text-muted">Tools available to the agent and their risk class.</p>
+                  <div id="tool-list"></div>
+                </div>
+                <div class="tab-pane fade" id="tab-actions" role="tabpanel" aria-labelledby="actions-tab">
+                  <h6>Commit changes</h6>
+                  <input id="commit-message" class="form-control form-control-sm mb-2" placeholder="Commit message">
+                  <button id="commit-btn" class="btn btn-sm btn-success mb-4"><i class="fas fa-check"></i> Commit</button>
+                  <h6>Safety net</h6>
+                  <p class="small text-muted">Every run creates an automatic checkpoint. Revert restores the workspace to the
+                    state before the current run; dirty work is saved to a safety stash first.</p>
+                  <button id="revert-btn" class="btn btn-sm btn-outline-warning"><i class="fas fa-undo"></i> Revert this run</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="chege-footer"></div>
+</div>
+
+<script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+<script src="/assets/vendor/adminlte.min.js"></script>
+<script src="/assets/vendor/marked.min.js"></script>
+<script src="/assets/vendor/purify.min.js"></script>
+<script src="/assets/vendor/highlight.min.js"></script>
+<script src="/assets/app.js"></script>
+<script src="/assets/js/playground.js"></script>
+</body>
+</html>

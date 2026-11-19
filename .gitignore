@@ -20,12 +20,25 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
 
 # Agent Workspaces, Runtime Data & Secrets
 workdir/
 data/
 scratch/
 logs/
+*.log
+backup.sql
+*.pem
+*.key
+
+# Local llama.cpp precompiled binaries and models (never committed)
+.llamacpp/
+*.gguf
+*.part
 
 # Databases
 *.db

@@ -1,13 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.database import get_db_session
 from backend.app.db.models import Project, Session as DBSession
-from backend.app.security.auth import verify_auth_token
 from backend.app.security.paths import sanitize_project_name
 
-router = APIRouter(prefix="/projects", tags=["projects"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 class CreateProjectRequest(BaseModel):
@@ -29,9 +28,10 @@ def list_projects(db: Session = Depends(get_db_session)):
     return {"projects": [p.model_dump() for p in projects]}
 
 
-@router.post("")
+@router.post("", status_code=status.HTTP_201_CREATED)
 def create_project(
     request: CreateProjectRequest,
+    response: Response,
     db: Session = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
 ):
@@ -42,7 +42,7 @@ def create_project(
 
     existing = db.exec(select(Project).where(Project.slug == slug)).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"Project '{slug}' already exists.")
+        raise HTTPException(status_code=409, detail=f"Project '{slug}' already exists.")
 
     project = Project(
         name=request.name.strip(),
@@ -72,6 +72,7 @@ def create_project(
     db.add(default_session)
     db.commit()
 
+    response.headers["Location"] = f"/api/v1/projects/{slug}"
     return {"project": project.model_dump(), "default_session_id": default_session.id}
 
 
