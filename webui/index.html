@@ -9,7 +9,6 @@
     <!-- highlight.js for beautiful code syntax highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <style>
-    <style>
         body { height: 100vh; overflow: hidden; background-color: #f8f9fa; }
         .sidebar { height: 100vh; background-color: #1e1e2e; color: #cdd6f4; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; border-right: 1px solid #313244; }
         .sidebar-content { flex-grow: 1; overflow-y: auto; }
@@ -24,6 +23,21 @@
         .file-item { cursor: pointer; color: #a6adc8; padding: 4px 8px; border-radius: 4px; transition: background 0.15s; }
         .file-item:hover { color: #89b4fa; background: rgba(255,255,255,0.05); }
         pre code { background-color: #1e1e2e; padding: 10px; border-radius: 5px; display: block; overflow-x: auto; }
+        /* File Viewer Modal */
+        #fileModal .modal-content { background: #1e1e2e; color: #cdd6f4; border: 1px solid #45475a; }
+        #fileModal .modal-header { background: #11111b; border-bottom: 1px solid #313244; }
+        #fileModal .modal-header .modal-title { color: #cdd6f4; font-family: monospace; font-size: 0.95rem; }
+        #fileModal .modal-header .btn-close { filter: invert(1); }
+        #fileModal .modal-body { background: #1e1e2e; padding: 0; }
+        #fileModal pre { margin: 0; max-height: 75vh; overflow: auto; }
+        #fileModal pre code { border-radius: 0; font-size: 0.82rem; line-height: 1.6; }
+        .file-ext-badge { font-size: 0.72rem; background: #313244; color: #89b4fa; border-radius: 4px; padding: 2px 8px; font-family: monospace; margin-left: 8px; }
+        /* Tool indicator chip */
+        .tool-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-family: monospace;
+                     background: #313244; color: #f9e2af; border-radius: 20px; padding: 2px 10px;
+                     border: 1px solid #45475a; animation: tool-chip-in 0.2s ease; }
+        @keyframes tool-chip-in { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+        .tool-chips-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
         /* New Project Modal */
         .project-slug-preview { font-family: monospace; font-size: 0.85rem; background: #f1f3f5; border-radius: 4px; padding: 4px 8px; color: #495057; }
         .project-slug-preview.valid { border-left: 3px solid #198754; }
@@ -58,6 +72,19 @@
         .tool-call-args { font-size: 0.75rem; color: #a6adc8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
         .tool-call-body { padding: 8px 12px; background: #11111b; border-top: 1px solid #313244; display: none; }
         .tool-call-body pre { margin: 0; font-size: 0.75rem; color: #a6e3a1; white-space: pre-wrap; }
+        /* Tool Approval Card styles */
+        .tool-approval-card { background: #1e1e2e; border: 1px solid #eba0ac; border-radius: 8px; margin: 12px 0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .tool-approval-header { background: #eba0ac; color: #11111b; padding: 8px 14px; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
+        .tool-approval-body { padding: 12px 14px; background: #181825; }
+        .tool-approval-item { border-bottom: 1px dashed #313244; padding-bottom: 10px; margin-bottom: 10px; }
+        .tool-approval-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+        .tool-item-title { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: #eba0ac; font-family: monospace; font-weight: bold; margin-bottom: 6px; }
+        .tool-item-title input[type="checkbox"] { cursor: pointer; accent-color: #eba0ac; }
+        .tool-item-args { font-size: 0.75rem; }
+        .tool-item-args textarea { background: #11111b; border: 1px solid #313244; color: #a6e3a1; font-family: monospace; font-size: 0.75rem; border-radius: 4px; padding: 6px 10px; width: 100%; resize: vertical; }
+        .tool-approval-actions { display: flex; gap: 8px; margin-top: 10px; }
+        .tool-approval-actions button { font-size: 0.78rem; font-weight: bold; border-radius: 4px; padding: 4px 12px; }
+
         /* Agent Thinking Animation */
         .thinking-bubble { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
         .thinking-title { font-size: 0.82rem; font-weight: 600; color: #89b4fa; display: flex; align-items: center; gap: 8px; }
@@ -83,6 +110,16 @@
             background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
             background-size: 12px 12px;
         }
+        /* Project Brief styles */
+        .brief-card { background: #181825; border: 1px solid #313244; border-radius: 6px; padding: 10px; margin-top: 10px; }
+        .brief-header { font-size: 0.78rem; font-weight: 700; color: #f5c2e7; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; align-items: center; }
+        .brief-input { background: #11111b; border: 1px solid #313244; color: #cdd6f4; font-size: 0.75rem; border-radius: 4px; padding: 4px 8px; width: 100%; margin-bottom: 6px; outline: none; transition: border-color 0.15s; }
+        .brief-input::placeholder { color: #585b70; }
+        .brief-input:focus { border-color: #f5c2e7; }
+        .btn-brief-save { background: #f5c2e7; color: #11111b; font-size: 0.7rem; font-weight: 700; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; display: block; width: 100%; transition: opacity 0.15s; }
+        .btn-brief-save:hover { opacity: 0.9; }
+        .completed-steps-list { max-height: 80px; overflow-y: auto; font-size: 0.7rem; color: #a6adc8; padding-left: 12px; margin-bottom: 0; }
+        .completed-steps-list li { margin-bottom: 2px; }
     </style>
 </head>
 <body>
@@ -120,9 +157,30 @@
                     <h6 class="mb-0 text-white-50">📁 Workspace Files</h6>
                     <button class="btn btn-sm btn-outline-light py-0 px-2" id="refreshFilesBtn">↻</button>
                 </div>
-                <ul class="list-unstyled" id="fileList">
+                <ul class="list-unstyled mb-3" id="fileList">
                     <!-- Files will be populated here -->
                 </ul>
+
+                <hr class="border-secondary">
+
+                <!-- Project Brief memory panel -->
+                <div class="brief-card">
+                    <div class="brief-header">
+                        <span>🧠 Project Memory</span>
+                        <span id="briefStatus" style="font-size:0.65rem; color:#a6e3a1; display:none;">Saved ✓</span>
+                    </div>
+                    <textarea class="brief-input" id="briefGoal" rows="2" placeholder="Project Goal (e.g. Build an expressive web app)"></textarea>
+                    <input type="text" class="brief-input" id="briefStack" placeholder="Tech Stack / Language (e.g. Python, JS)">
+                    <textarea class="brief-input" id="briefNotes" rows="2" placeholder="Architecture / custom notes"></textarea>
+                    <button class="btn-brief-save" id="saveBriefBtn">💾 Save to Agent Brain</button>
+                    
+                    <div class="mt-2 pt-2 border-top border-secondary">
+                        <small style="font-size: 0.68rem; font-weight:700; color:#b4befe; text-transform:uppercase;">Steps Completed:</small>
+                        <ul class="completed-steps-list" id="briefSteps">
+                            <li><i style="color:#585b70;">No steps run yet</i></li>
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <div class="sidebar-footer">
@@ -277,6 +335,7 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
 
@@ -337,7 +396,20 @@
         });
     }
 
-    function renderMarkdown(text) { return marked.parse(text); }
+    function escapeHtml(str) {
+        if (!str) return '';
+        const d = document.createElement('div');
+        d.textContent = String(str);
+        return d.innerHTML;
+    }
+
+    function renderMarkdown(text) {
+        const raw = marked.parse(text || '');
+        if (typeof DOMPurify !== 'undefined') {
+            return DOMPurify.sanitize(raw);
+        }
+        return raw;
+    }
 
     function buildMetricsBar(metrics) {
         if (!metrics) return '';
@@ -383,6 +455,228 @@
             </div>`;
         }).join('');
         return `<div class="mb-2">${cards}</div>`;
+    }
+
+    function buildToolApprovalCard(toolCalls) {
+        if (!toolCalls || toolCalls.length === 0) return '';
+        const cardId = `approval-card-${Date.now()}`;
+        
+        // Build chip list for header
+        const toolNames = toolCalls.map(tc => tc.name || (tc.function ? tc.function.name : 'unknown'));
+        const chipsHtml = toolNames.map(n => `<span class="tool-chip">🔧 ${n}</span>`).join('');
+
+        let itemsHtml = '';
+        toolCalls.forEach((tc, idx) => {
+            const prettyArgs = JSON.stringify(tc.arguments || {}, null, 2);
+            itemsHtml += `
+            <div class="tool-approval-item" data-tool="${tc.name || (tc.function ? tc.function.name : '')}">
+                <div class="tool-item-title">
+                    <input type="checkbox" checked class="tool-approve-checkbox" id="chk-${cardId}-${idx}">
+                    <label for="chk-${cardId}-${idx}">🔧 Execute ${tc.name || (tc.function ? tc.function.name : '')}</label>
+                </div>
+                <div class="tool-item-args">
+                    <textarea class="tool-args-textarea" rows="${prettyArgs.split('\n').length || 3}">${prettyArgs}</textarea>
+                </div>
+            </div>`;
+        });
+
+        return `
+        <div class="tool-approval-card" id="${cardId}">
+            <div class="tool-approval-header">
+                🛡️ Tool Execution Approval Required
+                <div class="tool-chips-row" style="margin-top:6px;">${chipsHtml}</div>
+            </div>
+            <div class="tool-approval-body">
+                ${itemsHtml}
+                <div class="tool-approval-actions">
+                    <button class="btn btn-success btn-sm btn-execute" onclick="submitApprovals('${cardId}')">Approve & Execute</button>
+                    <button class="btn btn-danger btn-sm btn-reject" onclick="rejectApprovals('${cardId}')">Reject All</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    window.submitApprovals = function(cardId) {
+        const card = $(`#${cardId}`);
+        const project = getProject();
+        const model = $('#modelSelect').val();
+        
+        const approvals = [];
+        let invalid = false;
+        card.find('.tool-approval-item').each(function() {
+            const item = $(this);
+            const toolName = item.data('tool');
+            const approved = item.find('.tool-approve-checkbox').is(':checked');
+            let args = {};
+            try {
+                args = JSON.parse(item.find('.tool-args-textarea').val());
+            } catch (e) {
+                alert('Invalid JSON in arguments for tool: ' + toolName);
+                invalid = true;
+                return;
+            }
+            approvals.push({
+                tool: toolName,
+                arguments: args,
+                approved: approved
+            });
+        });
+
+        if (invalid) return;
+
+        // Hide approval buttons, show thinking loader
+        card.find('.tool-approval-actions').html('<div class="text-white-50 fs-7">⚙️ Executing tools and resuming loop...</div>');
+        
+        const continueLoadingId = `load-${Date.now()}`;
+        const loadingHtml = `
+            <div class="message agent" id="${continueLoadingId}">
+                <div class="thinking-bubble">
+                    <div class="thinking-title">
+                        <span class="pulse-loader">
+                            <span class="pulse-dot"></span>
+                            <span class="pulse-dot"></span>
+                            <span class="pulse-dot"></span>
+                        </span>
+                        <span>Chege is running tools & thinking...</span>
+                    </div>
+                </div>
+            </div>`;
+        $('#chatHistory').append(loadingHtml);
+        scrollChat();
+
+        $.ajax({
+            url: `${API_BASE}/chat/continue`,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                project_name: project,
+                model: model,
+                enabled_tools: getEnabledTools(),
+                approvals: approvals
+            }),
+            success: function(response) {
+                card.remove();
+                $(`#${continueLoadingId}`).remove();
+                handleChatResponse(response);
+            },
+            error: function() {
+                card.find('.tool-approval-actions').html('<span class="text-danger">Error executing tools.</span>');
+                $(`#${continueLoadingId}`).remove();
+            }
+        });
+    };
+
+    window.rejectApprovals = function(cardId) {
+        const card = $(`#${cardId}`);
+        const project = getProject();
+        const model = $('#modelSelect').val();
+        
+        const approvals = [];
+        card.find('.tool-approval-item').each(function() {
+            const item = $(this);
+            const toolName = item.data('tool');
+            let args = {};
+            try {
+                args = JSON.parse(item.find('.tool-args-textarea').val());
+            } catch (e) {}
+            approvals.push({
+                tool: toolName,
+                arguments: args,
+                approved: false
+            });
+        });
+
+        card.find('.tool-approval-actions').html('<div class="text-white-50 fs-7">❌ Rejecting and resuming loop...</div>');
+        
+        const continueLoadingId = `load-${Date.now()}`;
+        const loadingHtml = `
+            <div class="message agent" id="${continueLoadingId}">
+                <div class="thinking-bubble">
+                    <div class="thinking-title">
+                        <span class="pulse-loader">
+                            <span class="pulse-dot"></span>
+                            <span class="pulse-dot"></span>
+                            <span class="pulse-dot"></span>
+                        </span>
+                        <span>Chege is thinking...</span>
+                    </div>
+                </div>
+            </div>`;
+        $('#chatHistory').append(loadingHtml);
+        scrollChat();
+
+        $.ajax({
+            url: `${API_BASE}/chat/continue`,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                project_name: project,
+                model: model,
+                enabled_tools: getEnabledTools(),
+                approvals: approvals
+            }),
+            success: function(response) {
+                card.remove();
+                $(`#${continueLoadingId}`).remove();
+                handleChatResponse(response);
+            },
+            error: function() {
+                card.find('.tool-approval-actions').html('<span class="text-danger">Error.</span>');
+                $(`#${continueLoadingId}`).remove();
+            }
+        });
+    };
+
+    function handleChatResponse(response) {
+        const project = getProject();
+        let html = buildToolCallCards(response.tool_call_log);
+        html += renderMarkdown(response.reply);
+
+        if (response.saved_files && response.saved_files.length > 0) {
+            html += '<hr><strong>📁 Files saved:</strong><ul>';
+            response.saved_files.forEach(f => {
+                html += `<li><code>${escapeHtml(f)}</code></li>`;
+            });
+            html += '</ul>';
+
+            $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
+                const list = $('#fileList');
+                list.empty();
+                if (data.files) {
+                    data.files.forEach(file => {
+                        const safeFile = escapeHtml(file);
+                        list.append(`<li class="file-item mb-1" data-file="${safeFile}">📄 ${safeFile}</li>`);
+                    });
+                }
+            });
+        }
+
+        if (response.status === 'success') {
+            html += buildMetricsBar(response.metrics);
+        }
+
+        if (response.status === 'awaiting_approval' && response.tool_calls && response.tool_calls.length > 0) {
+            // Show a non-dismissable notice that tool use was detected
+            const toolNames = response.tool_calls.map(tc => {
+                const fn = tc.function || tc;
+                return fn.name || (fn.function && fn.function.name) || '?';
+            });
+            const chipsHtml = toolNames.map(n => `<span class="tool-chip">🔧 ${n}</span>`).join('');
+            html += `<div style="margin-top:8px;"><small style="color:#a6adc8;">🔍 Tool use detected:</small><div class="tool-chips-row">${chipsHtml}</div></div>`;
+        }
+
+        const msgEl = $(`<div class="message agent">${html}</div>`);
+        msgEl.find('pre code').each(function() {
+            hljs.highlightElement(this);
+        });
+        $('#chatHistory').append(msgEl);
+
+        if (response.status === 'awaiting_approval') {
+            const approvalCardHtml = buildToolApprovalCard(response.tool_calls);
+            $('#chatHistory').append(approvalCardHtml);
+        }
+        
+        scrollChat();
     }
 
 
@@ -645,6 +939,22 @@
                 }
             });
 
+            // Load project brain context
+            $.get(`${API_BASE}/project-brain?project_name=${project}`, function(brain) {
+                $('#briefGoal').val(brain.goal || '');
+                $('#briefStack').val(brain.stack || '');
+                $('#briefNotes').val(brain.notes || '');
+                const stepsList = $('#briefSteps');
+                stepsList.empty();
+                if (brain.completed_steps && brain.completed_steps.length > 0) {
+                    brain.completed_steps.forEach(step => {
+                        stepsList.append(`<li>✓ ${step}</li>`);
+                    });
+                } else {
+                    stepsList.append('<li><i style="color:#585b70;">No steps run yet</i></li>');
+                }
+            });
+
             $.get(`${API_BASE}/history?project_name=${project}`, function(data) {
                 const chat = $('#chatHistory');
                 chat.empty();
@@ -663,6 +973,11 @@
                                 hljs.highlightElement(this);
                             });
                             chat.append(msgEl);
+
+                            if (msg.pending_approval && msg.tool_calls) {
+                                const approvalCardHtml = buildToolApprovalCard(msg.tool_calls);
+                                chat.append(approvalCardHtml);
+                            }
                         }
                     });
                 }
@@ -670,14 +985,72 @@
             });
         }
 
+        // Save Project Memory / Brain
+        $('#saveBriefBtn').click(function() {
+            const project = getProject();
+            const payload = {
+                project_name: project,
+                goal: $('#briefGoal').val().trim(),
+                stack: $('#briefStack').val().trim(),
+                notes: $('#briefNotes').val().trim(),
+                completed_steps: []
+            };
+
+            // Grab existing steps so we don't clear them
+            $('#briefSteps li').each(function() {
+                const txt = $(this).text().replace(/^✓\s+/, '').trim();
+                if (txt && !txt.includes("No steps run yet")) {
+                    payload.completed_steps.push(txt);
+                }
+            });
+
+            const status = $('#briefStatus');
+            $.ajax({
+                url: `${API_BASE}/project-brain`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function() {
+                    status.fadeIn(200).delay(1500).fadeOut(200);
+                }
+            });
+        });
+
         $('#refreshFilesBtn').click(loadProjectState);
 
         $(document).on('click', '.file-item', function() {
             const file = $(this).data('file');
             const project = getProject();
             $.get(`${API_BASE}/files/${file}?project_name=${project}`, function(data) {
-                $('#fileModalTitle').text(file);
-                $('#fileModalContent').text(data.content);
+                // Detect language from file extension for syntax highlighting
+                const ext = file.split('.').pop().toLowerCase();
+                const extToLang = {
+                    py: 'python', js: 'javascript', ts: 'typescript', jsx: 'javascript',
+                    tsx: 'typescript', html: 'html', css: 'css', json: 'json',
+                    md: 'markdown', sh: 'bash', yml: 'yaml', yaml: 'yaml',
+                    toml: 'toml', rs: 'rust', go: 'go', java: 'java',
+                    cpp: 'cpp', c: 'c', cs: 'csharp', rb: 'ruby',
+                    php: 'php', sql: 'sql', xml: 'xml', txt: 'plaintext',
+                    dockerfile: 'dockerfile',
+                };
+                const lang = extToLang[ext] || 'plaintext';
+
+                // Build title with badge
+                $('#fileModalTitle').html(
+                    `${file}<span class="file-ext-badge">.${ext}</span>`
+                );
+
+                const codeEl = document.getElementById('fileModalContent');
+                codeEl.textContent = data.content;
+                codeEl.className = `language-${lang}`;
+                // Reset hljs state so it re-highlights
+                delete codeEl.dataset.highlighted;
+                if (lang !== 'plaintext' && hljs.getLanguage(lang)) {
+                    hljs.highlightElement(codeEl);
+                } else {
+                    hljs.highlightElement(codeEl);
+                }
+
                 new bootstrap.Modal(document.getElementById('fileModal')).show();
             });
         });
@@ -713,6 +1086,11 @@
             });
         });
 
+        // ── Prompt history (terminal-style ↑/↓ navigation) ──────────────────
+        const promptHistory = [];
+        let historyCursor = -1;   // -1 = not navigating, points to current position
+        let historyDraft  = '';   // saves the live draft when user presses ↑
+
         $('#chatForm').submit(function(e) {
             e.preventDefault();
             const msg = $('#chatInput').val().trim();
@@ -720,6 +1098,11 @@
             const project = getProject();
             
             if (!msg || !model) return;
+
+            // Push to history and reset cursor
+            promptHistory.push(msg);
+            historyCursor = -1;
+            historyDraft  = '';
 
             $('#chatHistory').append(`<div class="message user">${renderMarkdown(msg)}</div>`);
             $('#chatInput').val('');
@@ -758,36 +1141,7 @@
                 }),
                 success: function(response) {
                     $(`#${loadingId}`).remove();
-
-                    let html = buildToolCallCards(response.tool_call_log);
-                    html += renderMarkdown(response.reply);
-
-                    if (response.saved_files && response.saved_files.length > 0) {
-                        html += '<hr><strong>📁 Files saved:</strong><ul>';
-                        response.saved_files.forEach(f => {
-                            html += `<li><code>${f}</code></li>`;
-                        });
-                        html += '</ul>';
-
-                        $.get(`${API_BASE}/files?project_name=${project}`, function(data) {
-                            const list = $('#fileList');
-                            list.empty();
-                            if (data.files) {
-                                data.files.forEach(file => {
-                                    list.append(`<li class="file-item mb-1" data-file="${file}">📄 ${file}</li>`);
-                                });
-                            }
-                        });
-                    }
-
-                    html += buildMetricsBar(response.metrics);
-
-                    const msgEl = $(`<div class="message agent">${html}</div>`);
-                    msgEl.find('pre code').each(function() {
-                        hljs.highlightElement(this);
-                    });
-                    $('#chatHistory').append(msgEl);
-                    scrollChat();
+                    handleChatResponse(response);
                 },
                 error: function() {
                     $(`#${loadingId}`).text("Error communicating with backend.");
@@ -796,9 +1150,57 @@
         });
 
         $('#chatInput').keydown(function(e) {
-            if (e.keyCode == 13 && !e.shiftKey) {
+            const input = $(this);
+            const val   = input.val();
+
+            // Enter → send (unless Shift held for newline)
+            if (e.keyCode === 13 && !e.shiftKey) {
                 e.preventDefault();
                 $('#chatForm').submit();
+                return;
+            }
+
+            // ↑ arrow — go back in history
+            if (e.keyCode === 38) {
+                if (promptHistory.length === 0) return;
+                // Only intercept when the field is empty OR we are already in history mode
+                if (val !== '' && historyCursor === -1) return;
+                e.preventDefault();
+                if (historyCursor === -1) {
+                    // Save whatever is currently typed as a draft
+                    historyDraft  = val;
+                    historyCursor = promptHistory.length - 1;
+                } else if (historyCursor > 0) {
+                    historyCursor--;
+                }
+                input.val(promptHistory[historyCursor]);
+                // Move caret to end
+                const len = input.val().length;
+                this.setSelectionRange(len, len);
+                return;
+            }
+
+            // ↓ arrow — go forward in history
+            if (e.keyCode === 40) {
+                if (historyCursor === -1) return;   // not in history mode
+                e.preventDefault();
+                if (historyCursor < promptHistory.length - 1) {
+                    historyCursor++;
+                    input.val(promptHistory[historyCursor]);
+                } else {
+                    // Reached the end — restore the draft
+                    historyCursor = -1;
+                    input.val(historyDraft);
+                }
+                const len = input.val().length;
+                this.setSelectionRange(len, len);
+                return;
+            }
+
+            // Any other key while navigating → exit history mode, keep current text
+            if (historyCursor !== -1 && e.keyCode !== 38 && e.keyCode !== 40) {
+                historyCursor = -1;
+                historyDraft  = '';
             }
         });
     });

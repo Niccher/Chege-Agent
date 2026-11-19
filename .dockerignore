@@ -1,0 +1,50 @@
+# Environments & Virtual Envs
+.env
+.env.*
+py-env/
+.venv/
+venv/
+env/
+
+# IDEs
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Dependencies & Python Cache
+vendor/
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Runtime data, workspaces & secrets
+workdir/
+data/
+logs/
+scratch/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+
+# Tests & Coverage
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+

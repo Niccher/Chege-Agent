@@ -1,20 +1,54 @@
-# Python virtual environment
+# Environments & Virtual Envs
+.env
+.env.*
+!.env.example
 py-env/
-__pycache__/
-*.pyc
+.venv/
+venv/
+env/
 
-# Agent Workspaces and Logs
-# We ignore these because they contain dynamic user-generated content 
-# and their own nested git repositories.
+# IDEs & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies & Python Cache
+vendor/
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Agent Workspaces, Runtime Data & Secrets
 workdir/
+data/
+scratch/
 logs/
 
-# OS specific files
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+*.apk
+*.aab
+*.jar
+*.war
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# OS Specific
 .DS_Store
 Thumbs.db
 
-# IDEs and Editors
-.vscode/
-.idea/
-*.swp
-*.swo
