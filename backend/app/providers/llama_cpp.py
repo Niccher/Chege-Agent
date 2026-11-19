@@ -1,13 +1,6 @@
-from typing import AsyncIterator
 import httpx
 from backend.app.core.logging import get_logger
-from backend.app.providers.base import (
-    ChatChunk,
-    InternalMessage,
-    ModelInfo,
-    ModelOptions,
-    Provider,
-)
+from backend.app.providers.base import ModelInfo
 from backend.app.providers.openai_compat import OpenAICompatProvider
 
 logger = get_logger("provider.llama_cpp")
@@ -19,8 +12,13 @@ class LlamaCppProvider(OpenAICompatProvider):
     Interfaces with llama-server running OpenAI-compatible endpoints at /v1.
     """
 
-    def __init__(self, base_url: str = "http://host.docker.internal:8080/v1", api_key: str | None = None):
-        super().__init__(base_url=base_url, api_key=api_key or "none")
+    def __init__(
+        self,
+        base_url: str = "http://host.docker.internal:8080/v1",
+        api_key: str | None = None,
+        timeout: float = 120.0,
+    ):
+        super().__init__(base_url=base_url, api_key=api_key or "none", timeout=timeout)
         self.server_root = self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
 
     async def check_health(self) -> dict:

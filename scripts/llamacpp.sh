@@ -277,8 +277,13 @@ modelctl_running() {
 
 start_modelctl() {
     if modelctl_running; then
-        log "Model control service already running (PID $(cat "$MODELCTL_PID_FILE"))."
-        return 0
+        if [ "$CONTROL_SCRIPT" -nt "$MODELCTL_PID_FILE" ]; then
+            info "Model control service script changed; restarting it."
+            stop_modelctl
+        else
+            log "Model control service already running (PID $(cat "$MODELCTL_PID_FILE"))."
+            return 0
+        fi
     fi
     [ ! -f "$CONTROL_SCRIPT" ] && { warn "modelctl.py missing; model manager unavailable."; return 0; }
     [ -f "$MODELCTL_PID_FILE" ] && rm -f "$MODELCTL_PID_FILE"

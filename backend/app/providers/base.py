@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Literal, Protocol
+from typing import AsyncIterator, Protocol
 from pydantic import BaseModel
 
 

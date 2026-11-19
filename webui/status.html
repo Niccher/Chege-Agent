@@ -31,6 +31,10 @@
     </div></section>
 
     <section class="app-content"><div class="container-fluid">
+      <div class="callout callout-success"><b>Phase 4C is shipped.</b> Tool governance with grant prompts, the tree-style file
+        browser, run phases with an Activity feed and resilient SSE replay, and a real agent-side context budget are live in
+        this build. Local access: <code>http://127.0.0.1:8001/</code>.</div>
+
       <div class="chege-status-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
           <span class="chege-badge"><i class="fas fa-house-lock"></i> Loopback only · no authentication</span>
@@ -84,6 +88,34 @@
         </div>
       </div>
 
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <div class="chege-status-card h-100">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-circle-check chege-section-icon"></i>Enabled tools
+              <span class="chege-status-badge is-ok">Shipped</span></h3></div>
+            <div class="card-body"><div id="enabled-tools" class="small text-muted">Loading…</div></div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="chege-status-card h-100">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-hand-paper chege-section-icon"></i>Grant prompts
+              <span class="chege-status-badge is-ok">Shipped</span></h3></div>
+            <div class="card-body"><div id="grant-prompts" class="small text-muted">Loading…</div></div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="chege-status-card h-100">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-ruler-combined chege-section-icon"></i>Context budget
+              <span class="chege-status-badge is-ok">Shipped</span></h3></div>
+            <div class="card-body">
+              <div id="context-budget" class="small text-muted">Loading…</div>
+              <p class="small text-muted mt-2 mb-0">Long histories that still exceed the budget: start a new thread (or fork
+                from a safe message) to shorten the history.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="row g-3">
         <div class="col-lg-6">
           <div class="chege-status-card h-100">
@@ -111,7 +143,8 @@
       <div class="row g-3 mt-1">
         <div class="col-lg-7">
           <div class="chege-status-card h-100">
-            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-list-check chege-section-icon"></i>Available tools</h3></div>
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-list-check chege-section-icon"></i>Available tools
+              <a href="/tools" class="ms-2 small">Manage on /tools</a></h3></div>
             <div class="card-body">
               <div id="tool-badges" class="text-muted small">Loading…</div>
             </div>
@@ -122,6 +155,7 @@
             <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-arrow-up-right-from-square chege-section-icon"></i>Quick links</h3></div>
             <div class="card-body d-grid gap-2">
               <a class="btn btn-sm btn-outline-primary" href="/app"><i class="fas fa-terminal"></i> Open playground</a>
+              <a class="btn btn-sm btn-outline-primary" href="/tools"><i class="fas fa-wrench"></i> Tool governance</a>
               <a class="btn btn-sm btn-outline-primary" href="/settings"><i class="fas fa-sliders"></i> Settings console</a>
               <a class="btn btn-sm btn-outline-secondary" href="/docs" target="_blank" rel="noopener"><i class="fas fa-book"></i> Swagger UI</a>
               <a class="btn btn-sm btn-outline-secondary" href="/api/v1/openapi.json" target="_blank" rel="noopener"><i class="fas fa-code"></i> OpenAPI JSON</a>
@@ -208,9 +242,14 @@
         runtimeRow('Database DSN', dsn || 'embedded SQLite'),
         runtimeRow('Host binding', s.host + ':' + s.port)
       ].join('');
+      $('context-budget').innerHTML = 'Agent prompt budget (<code>default_context_window</code>): <b>' + esc(s.default_context_window) +
+        '</b> tokens · llama-server context (<code>n_ctx</code> / <code>CHEGE_LLAMACPP_CTX</code> = <code>llamacpp_ctx</code>): <b>' +
+        esc(s.llamacpp_ctx) + '</b> tokens. Separate knobs — changing the server one requires ' +
+        '<code>bash scripts/llamacpp.sh restart</code>.';
     } catch (e) {
       $('runtime-info').innerHTML = runtimeRow('Error', e.message);
       $('db-detail').textContent = e.message;
+      $('context-budget').textContent = e.message;
     }
 
     try {
@@ -228,12 +267,20 @@
     try {
       const t = await Chege.api('/tools');
       const tools = t.tools || [];
+      const enabled = tools.filter((x) => x.enabled).length;
+      const prompted = tools.filter((x) => x.grant_mode === 'prompt_once').length;
       $('tool-count').textContent = String(tools.length);
       $('tool-badges').innerHTML = tools.map((x) =>
         `<span class="metric-pill">${esc(x.name)} · ${esc(x.risk)}</span>`).join('');
+      $('enabled-tools').innerHTML = '<b>' + enabled + ' of ' + tools.length + '</b> tools enabled; disabled tools are ' +
+        'excluded from the model schemas and blocked at execution. Manage on <a href="/tools">/tools</a>.';
+      $('grant-prompts').innerHTML = '<b>' + prompted + '</b> tool' + (prompted === 1 ? '' : 's') +
+        ' require a one-time grant per run (<code>prompt_once</code>); grants are audited in <code>tool_grants</code>.';
     } catch (e) {
       $('tool-count').textContent = '—';
       $('tool-badges').textContent = e.message;
+      $('enabled-tools').textContent = e.message;
+      $('grant-prompts').textContent = e.message;
     }
 
     $('last-checked').textContent = 'Updated ' + new Date().toLocaleTimeString();

@@ -17,10 +17,25 @@ WRITABLE_SETTING_KEYS = (
     "openai_api_key",
     "sandbox_backend",
     "default_context_window",
+    "default_temperature",
+    "default_top_p",
     "max_steps",
     "run_timeout_seconds",
+    "provider_timeout_seconds",
     "llamacpp_model",
     "ollama_model",
+    "llamacpp_ctx",
+    "ollama_num_ctx",
+    "ollama_keep_alive",
+    "openai_max_tokens",
+)
+
+# Settings that are host/deployment controlled. The UI shows them for
+# reference but must never write them from the browser.
+READ_ONLY_SETTING_KEYS = (
+    "host", "port", "data_dir", "workdir", "logs_dir", "database_url",
+    "projects_dir", "docker_socket_proxy",
+    "default_sandbox_image", "llamacpp_control_url",
 )
 
 
@@ -40,6 +55,10 @@ class Settings(BaseSettings):
     data_dir: Path = Path("./data")
     workdir: Path = Path("./workdir")
     logs_dir: Path = Path("./logs")
+    # Optional dedicated projects root. When unset, workdir is used so existing
+    # installs keep their projects. Compose must add a matching bind mount when
+    # pointing this at a different host folder.
+    projects_dir: Path | None = None
 
     # Database. Empty/None => embedded SQLite in data_dir. Set to a
     # postgresql+psycopg://... DSN to use the optional Postgres container.
@@ -72,16 +91,33 @@ class Settings(BaseSettings):
     ollama_model: str | None = None
     llamacpp_control_url: str = "http://host.docker.internal:8081"
 
-    # Agent Loop Defaults (AGT-01, AGT-04)
+    # Agent Loop Defaults (AGT-01, AGT-04). These are consumed by the run loop
+    # (context.py / run_manager.py / runs_router.py), not just documented.
     default_context_window: int = 16384
+    default_temperature: float = 0.2
+    default_top_p: float = 0.9
     max_steps: int = 50
     run_timeout_seconds: int = 600
+    provider_timeout_seconds: int = 120
+
+    # Runner-specific options. Only values the provider actually sends are
+    # exposed; host-side llama.cpp flags require scripts/llamacpp.sh restart.
+    llamacpp_ctx: int = 4096          # detected llama-server n_ctx (restart required)
+    ollama_num_ctx: int = 8192
+    ollama_keep_alive: str = "15m"
+    openai_max_tokens: int | None = None
 
     def init_directories(self) -> None:
         """Create the data, workspace, and log directories."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
+        (self.projects_dir or self.workdir).mkdir(parents=True, exist_ok=True)
+
+    def project_root(self, slug: str) -> Path:
+        """Resolve a project slug to a contained workspace directory."""
+        from backend.app.security.paths import resolve_in
+        return resolve_in(self.projects_dir or self.workdir, slug)
 
     def get_masked_settings(self) -> dict:
         """Return configuration safe for UI exposure (API keys redacted)."""

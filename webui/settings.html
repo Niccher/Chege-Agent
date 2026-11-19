@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
   <link rel="stylesheet" href="/assets/vendor/all.min.css">
   <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/settings.css">
 </head>
 <body class="hold-transition layout-fixed fixed-header sidebar-expand-lg">
 <div class="app-wrapper">
@@ -27,7 +28,8 @@
   <main class="app-main">
     <section class="app-content-header"><div class="container-fluid">
       <h1 class="m-0">Settings console</h1>
-      <p class="text-muted mb-0">One place for defaults, provider endpoints, sandbox and agent limits.</p>
+      <p class="text-muted mb-0">Defaults, provider &amp; runner configuration, sandbox and agent limits. Hover the
+        <i class="fas fa-circle-question chege-tip-inline"></i> icons for an explanation of every field.</p>
     </div></section>
 
     <section class="app-content"><div class="container-fluid">
@@ -45,16 +47,29 @@
         </div>
       </div>
 
+      <div class="chege-callout chege-callout-info mb-4">
+        <i class="fas fa-circle-info"></i>
+        <div><b>Runtime vs restart-required.</b> Most fields here apply to new runs immediately. A few (marked
+          <span class="chege-restart-tag"><i class="fas fa-rotate"></i> restart required</span>) are read by the runner
+          process itself and need <code>bash scripts/llamacpp.sh restart</code> or a redeploy to take effect.</div>
+      </div>
+
       <div class="row g-3">
         <div class="col-lg-6">
           <div class="chege-settings-card h-100">
             <div class="card-header">
-              <h3 class="mb-0"><i class="fas fa-palette chege-section-icon"></i>Appearance</h3>
+              <h3 class="mb-0"><i class="fas fa-palette chege-section-icon"></i>Appearance
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Controls how this console looks. Stored only in this browser — it is never sent to the server."></i>
+              </h3>
               <span class="chege-status-badge">This browser</span>
             </div>
             <div class="card-body">
-              <p class="text-muted small">Stored locally in this browser and applied before the page paints on every page.</p>
-              <div class="d-flex flex-wrap gap-2" role="group" aria-label="Theme">
+              <label class="form-label" for="theme-group">Theme
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Light, Dark, or System (follows your operating system). Applied before the page paints on every page."></i>
+              </label>
+              <div class="d-flex flex-wrap gap-2" id="theme-group" role="group" aria-label="Theme">
                 <button type="button" class="btn btn-sm btn-outline-secondary chege-theme-choice" data-bs-theme-value="light" aria-pressed="false">
                   <i class="fas fa-sun"></i> Light
                 </button>
@@ -65,6 +80,7 @@
                   <i class="fas fa-circle-half-stroke"></i> System
                 </button>
               </div>
+              <span class="chege-setting-help">Saved in <code>localStorage</code> under <code>lte-theme</code> and synced with AdminLTE's colour mode.</span>
             </div>
           </div>
         </div>
@@ -72,16 +88,22 @@
         <div class="col-lg-6">
           <div class="chege-settings-card h-100">
             <div class="card-header">
-              <h3 class="mb-0"><i class="fas fa-shield-halved chege-section-icon"></i>Sandbox</h3>
+              <h3 class="mb-0"><i class="fas fa-shield-halved chege-section-icon"></i>Sandbox
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Where the agent runs shell commands and edits files. Docker gives each project an isolated container."></i>
+              </h3>
               <span class="chege-status-badge">Runtime</span>
             </div>
             <div class="card-body">
-              <label class="form-label" for="sandbox_backend">Sandbox backend</label>
+              <label class="form-label" for="sandbox_backend">Sandbox backend
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="docker = isolated per-project container (recommended). local = runs directly on the host with no process isolation (explicit opt-in only). The app never publishes a host port."></i>
+              </label>
               <select id="sandbox_backend" class="form-select">
                 <option value="docker">docker — isolated per-project container (recommended)</option>
                 <option value="local">local — no process isolation (explicit opt-in only)</option>
               </select>
-              <span class="chege-setting-help">Use <code>docker</code> unless you are developing natively. The app never publishes a host port.</span>
+              <span class="chege-setting-help">Use <code>docker</code> unless you are developing natively.</span>
             </div>
           </div>
         </div>
@@ -89,36 +111,125 @@
 
       <div class="chege-settings-card mt-3">
         <div class="card-header">
-          <h3 class="mb-0"><i class="fas fa-plug chege-section-icon"></i>Providers &amp; models</h3>
+          <h3 class="mb-0"><i class="fas fa-plug chege-section-icon"></i>Providers &amp; models
+            <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+               data-bs-title="Choose the default runner, then configure only that runner. Endpoint and sampling options apply to new runs immediately."></i>
+          </h3>
           <span class="chege-status-badge" id="active-provider-badge">—</span>
         </div>
         <div class="card-body">
-          <div class="chege-setting-grid">
-            <div>
-              <label class="form-label" for="default_provider">Default provider</label>
-              <select id="default_provider" class="form-select">
-                <option value="llama_cpp">llama.cpp (local, recommended)</option>
-                <option value="ollama">Ollama (local)</option>
-                <option value="openai">OpenAI / compatible</option>
-              </select>
+          <div class="mb-3">
+            <label class="form-label" for="default_provider">Default provider
+              <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                 data-bs-title="The runner used for new runs unless a run explicitly overrides it. llama.cpp and Ollama run locally; OpenAI-compatible can be a cloud API or a local server."></i>
+            </label>
+            <select id="default_provider" class="form-select chege-provider-select">
+              <option value="llama_cpp">llama.cpp (local, recommended)</option>
+              <option value="ollama">Ollama (local)</option>
+              <option value="openai">OpenAI / compatible</option>
+            </select>
+            <span class="chege-setting-help">Only the selected runner's settings below are used. The playground can still override the provider per run.</span>
+          </div>
+
+          <!-- llama.cpp runner -->
+          <div class="chege-provider-panel" data-provider="llama_cpp">
+            <h5 class="chege-provider-title"><i class="fas fa-microchip"></i> llama.cpp runner
+              <span class="chege-restart-tag"><i class="fas fa-rotate"></i> server flags need restart</span>
+            </h5>
+            <div class="chege-setting-grid">
+              <div>
+                <label class="form-label" for="llamacpp_url">llama.cpp endpoint
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="OpenAI-compatible URL of the host llama-server, reachable from the container. Default: http://host.docker.internal:8080/v1"></i>
+                </label>
+                <input id="llamacpp_url" class="form-control" placeholder="http://host.docker.internal:8080/v1">
+              </div>
+              <div>
+                <label class="form-label" for="llamacpp_model">Model (GGUF alias/path)
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="Which local GGUF model the host control service should serve. Changing the served model requires scripts/llamacpp.sh restart."></i>
+                </label>
+                <input id="llamacpp_model" class="form-control" list="llamacpp-model-options"
+                       placeholder="qwen2.5-coder:latest or /path/to/model.gguf">
+                <datalist id="llamacpp-model-options"></datalist>
+                <div id="llamacpp-model-meta" class="chege-setting-help">Loading installed GGUF models…</div>
+              </div>
+              <div>
+                <label class="form-label" for="llamacpp_ctx">Server context (n_ctx)
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="Context size the llama-server process was started with. This is set by CHEGE_LLAMACPP_CTX in .env and needs scripts/llamacpp.sh restart. Keep the Agent context window below this value."></i>
+                </label>
+                <input id="llamacpp_ctx" class="form-control" type="number" min="1024" step="1024">
+                <span class="chege-setting-help chege-help-warn"><i class="fas fa-triangle-exclamation"></i>
+                  Reflected from <code>CHEGE_LLAMACPP_CTX</code>. To raise it, edit <code>.env</code> and run
+                  <code>bash scripts/llamacpp.sh restart</code>.</span>
+              </div>
             </div>
-            <div>
-              <label class="form-label" for="llamacpp_url">llama.cpp endpoint</label>
-              <input id="llamacpp_url" class="form-control" placeholder="http://host.docker.internal:8080/v1">
-              <span class="chege-setting-help">Precompiled llama-server on the host, reachable from the container.</span>
+          </div>
+
+          <!-- Ollama runner -->
+          <div class="chege-provider-panel" data-provider="ollama">
+            <h5 class="chege-provider-title"><i class="fas fa-hippo"></i> Ollama runner</h5>
+            <div class="chege-setting-grid">
+              <div>
+                <label class="form-label" for="ollama_url">Ollama endpoint
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="Base URL of Ollama on the host, reachable from the container. Default: http://host.docker.internal:11434"></i>
+                </label>
+                <input id="ollama_url" class="form-control" placeholder="http://host.docker.internal:11434">
+              </div>
+              <div>
+                <label class="form-label" for="ollama_model">Model tag
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="Ollama model tag to use by default (for example qwen2.5-coder:latest). Must already be pulled on the host."></i>
+                </label>
+                <input id="ollama_model" class="form-control" list="ollama-model-options" placeholder="qwen2.5-coder:latest">
+                <datalist id="ollama-model-options"></datalist>
+                <div id="ollama-model-meta" class="chege-setting-help">Loading installed Ollama models…</div>
+              </div>
+              <div>
+                <label class="form-label" for="ollama_num_ctx">Context size (num_ctx)
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="Tokens Ollama allocates for each request. Sent with every Ollama run."></i>
+                </label>
+                <input id="ollama_num_ctx" class="form-control" type="number" min="1024" step="1024">
+              </div>
+              <div>
+                <label class="form-label" for="ollama_keep_alive">Keep alive
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="How long Ollama keeps the model loaded after a run (e.g. 15m, 1h, -1 for forever). Longer reloads less but uses more RAM."></i>
+                </label>
+                <input id="ollama_keep_alive" class="form-control" placeholder="15m">
+              </div>
             </div>
-            <div>
-              <label class="form-label" for="ollama_url">Ollama endpoint</label>
-              <input id="ollama_url" class="form-control" placeholder="http://host.docker.internal:11434">
-            </div>
-            <div>
-              <label class="form-label" for="openai_base_url">OpenAI-compatible base URL</label>
-              <input id="openai_base_url" class="form-control" placeholder="https://api.openai.com/v1">
-            </div>
-            <div class="full">
-              <label class="form-label" for="openai_api_key">OpenAI API key</label>
-              <input id="openai_api_key" class="form-control" type="password" autocomplete="off" placeholder="Leave the masked value unchanged to keep it">
-              <span class="chege-setting-help">Stored with 0600 permissions in <code>data/settings.json</code> and never returned unmasked by the API.</span>
+          </div>
+
+          <!-- OpenAI-compatible runner -->
+          <div class="chege-provider-panel" data-provider="openai">
+            <h5 class="chege-provider-title"><i class="fas fa-cloud"></i> OpenAI-compatible runner</h5>
+            <div class="chege-setting-grid">
+              <div>
+                <label class="form-label" for="openai_base_url">Base URL
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="OpenAI-compatible API root. Use https://api.openai.com/v1 for OpenAI, or a local server's /v1 URL."></i>
+                </label>
+                <input id="openai_base_url" class="form-control" placeholder="https://api.openai.com/v1">
+              </div>
+              <div>
+                <label class="form-label" for="openai_max_tokens">Max output tokens
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="Upper limit for generated tokens per response. Blank lets the provider decide."></i>
+                </label>
+                <input id="openai_max_tokens" class="form-control" type="number" min="1" step="256" placeholder="Blank = provider default">
+              </div>
+              <div class="full">
+                <label class="form-label" for="openai_api_key">API key
+                  <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                     data-bs-title="API key sent to the OpenAI-compatible endpoint. Stored with 0600 permissions in data/settings.json and always masked in responses."></i>
+                </label>
+                <input id="openai_api_key" class="form-control" type="password" autocomplete="off" placeholder="Leave the masked value unchanged to keep it">
+                <span class="chege-setting-help">Leave the masked value unchanged to keep the stored key. Clear the field to remove it.</span>
+              </div>
             </div>
           </div>
 
@@ -133,25 +244,104 @@
         </div>
       </div>
 
+      <div class="chege-settings-card mt-3" id="model-downloads">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-cloud-arrow-down chege-section-icon"></i>Download models
+            <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+               data-bs-title="Download a GGUF model directly from Hugging Face. The model list below is a curated catalog; a token is only needed for gated or private repositories."></i>
+          </h3>
+          <span class="chege-status-badge">Hugging Face</span>
+        </div>
+        <div class="card-body">
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-md-8">
+              <label class="form-label" for="settings-hf-token">Hugging Face token (optional)
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Used only for this download request. It is not written to settings.json and is not logged."></i>
+              </label>
+              <input id="settings-hf-token" class="form-control form-control-sm" type="password" autocomplete="off"
+                     placeholder="hf_… only for gated/private repositories">
+            </div>
+            <div class="col-md-4">
+              <button id="refresh-catalog" class="btn btn-sm btn-outline-secondary" type="button">
+                <i class="fas fa-rotate"></i> Refresh catalog
+              </button>
+            </div>
+          </div>
+          <div id="settings-catalog" class="model-catalog-list"><div class="text-muted small">Loading catalog…</div></div>
+          <hr>
+          <label class="form-label" for="settings-gguf-url">Custom GGUF URL</label>
+          <div class="input-group input-group-sm">
+            <input id="settings-gguf-url" class="form-control" placeholder="https://huggingface.co/.../model.gguf">
+            <input id="settings-gguf-name" class="form-control" placeholder="Optional filename.gguf">
+            <button id="settings-gguf-download" class="btn btn-primary" type="button">
+              <i class="fas fa-download"></i> Download
+            </button>
+          </div>
+          <span class="chege-setting-help">Direct <code>.gguf</code> URLs only. Downloads land in the host
+            <code>.llamacpp/models</code> folder and appear in the model dropdown when finished.</span>
+          <div class="chege-progress mt-3"><div class="chege-progress-bar" id="settings-download-progress-bar"></div></div>
+          <div class="chege-progress-label" id="settings-download-progress">Ready.</div>
+        </div>
+      </div>
+
       <div class="chege-settings-card mt-3">
         <div class="card-header">
-          <h3 class="mb-0"><i class="fas fa-gauge-high chege-section-icon"></i>Agent defaults</h3>
+          <h3 class="mb-0"><i class="fas fa-gauge-high chege-section-icon"></i>Agent defaults
+            <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+               data-bs-title="Applied to every new run. Hover each field for details. These are runtime values — no restart needed."></i>
+          </h3>
           <span class="chege-status-badge">Applied to new runs</span>
         </div>
         <div class="card-body">
           <div class="chege-setting-grid">
             <div>
-              <label class="form-label" for="default_context_window">Context window (tokens)</label>
+              <label class="form-label" for="default_context_window">Context window (tokens)
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Total token budget the agent uses to build a prompt. Tool schemas and a completion reserve are subtracted first, then history is trimmed to fit. Must be at or below the runner's context size."></i>
+              </label>
               <input id="default_context_window" class="form-control" type="number" min="1024" step="1024">
+              <span class="chege-setting-help">Prompt budget shared by system rules, conversation history, tool schemas and the model's reply. Keep it ≤ the runner context size above.</span>
             </div>
             <div>
-              <label class="form-label" for="max_steps">Max agent steps</label>
+              <label class="form-label" for="max_steps">Max agent steps
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Maximum number of tool-call rounds in a single run. Each step = one model reply plus its tool calls. Prevents runaway loops."></i>
+              </label>
               <input id="max_steps" class="form-control" type="number" min="1" step="1">
+              <span class="chege-setting-help">Higher values let the agent do more work but cost more time and tokens.</span>
             </div>
-            <div class="full">
-              <label class="form-label" for="run_timeout_seconds">Run timeout (seconds)</label>
+            <div>
+              <label class="form-label" for="default_temperature">Temperature
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Sampling randomness. 0 = deterministic and focused; higher values are more creative but less reliable. 0.2 suits coding."></i>
+              </label>
+              <input id="default_temperature" class="form-control" type="number" min="0" max="2" step="0.1">
+              <span class="chege-setting-help">Lower is more predictable. Range 0–2.</span>
+            </div>
+            <div>
+              <label class="form-label" for="default_top_p">Top-p (nucleus)
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Keeps only the most likely tokens whose cumulative probability reaches this value. 0.9 is a common default."></i>
+              </label>
+              <input id="default_top_p" class="form-control" type="number" min="0" max="1" step="0.05">
+              <span class="chege-setting-help">Lower narrows the choices. Range 0–1.</span>
+            </div>
+            <div>
+              <label class="form-label" for="run_timeout_seconds">Run timeout (seconds)
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Total wall-clock limit for an entire run, across all steps. When exceeded the run is marked failed with a clear message."></i>
+              </label>
               <input id="run_timeout_seconds" class="form-control" type="number" min="10" step="10">
-              <span class="chege-setting-help">The current playground also sends its own step limit when starting a run.</span>
+              <span class="chege-setting-help">Whole-run deadline, not per step.</span>
+            </div>
+            <div>
+              <label class="form-label" for="provider_timeout_seconds">Provider timeout (seconds)
+                <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+                   data-bs-title="Network timeout for a single model request. Applies to local endpoints too; raise it for slow hardware."></i>
+              </label>
+              <input id="provider_timeout_seconds" class="form-control" type="number" min="5" step="5">
+              <span class="chege-setting-help">Per-request HTTP timeout. Minimum 5 seconds.</span>
             </div>
           </div>
         </div>
@@ -159,7 +349,10 @@
 
       <div class="chege-settings-card mt-3">
         <div class="card-header">
-          <h3 class="mb-0"><i class="fas fa-server chege-section-icon"></i>Deployment reference</h3>
+          <h3 class="mb-0"><i class="fas fa-server chege-section-icon"></i>Deployment reference
+            <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+               data-bs-title="Read-only values set by .env and the deploy script. Shown so you can diagnose configuration; edit them in .env, not here."></i>
+          </h3>
           <span class="chege-status-badge">Read-only</span>
         </div>
         <div class="card-body">
@@ -170,6 +363,7 @@
                   <tr><th>Host binding</th><td><code id="ref-host">—</code></td></tr>
                   <tr><th>Host port</th><td><code id="ref-port">—</code></td></tr>
                   <tr><th>Database</th><td><code id="ref-database">—</code></td></tr>
+                  <tr><th>Projects dir</th><td><code id="ref-projects">—</code></td></tr>
                 </tbody>
               </table>
             </div>
@@ -179,6 +373,7 @@
                   <tr><th>Data directory</th><td><code id="ref-data">—</code></td></tr>
                   <tr><th>Workspaces</th><td><code id="ref-workdir">—</code></td></tr>
                   <tr><th>Logs</th><td><code id="ref-logs">—</code></td></tr>
+                  <tr><th>Sandbox image</th><td><code id="ref-sandbox-image">—</code></td></tr>
                 </tbody>
               </table>
             </div>
@@ -190,7 +385,10 @@
 
       <div class="chege-settings-card mt-3">
         <div class="card-header">
-          <h3 class="mb-0"><i class="fas fa-floppy-disk chege-section-icon"></i>Apply changes</h3>
+          <h3 class="mb-0"><i class="fas fa-floppy-disk chege-section-icon"></i>Apply changes
+            <i class="fas fa-circle-question chege-tip" data-bs-toggle="tooltip" data-bs-placement="top"
+               data-bs-title="Choose whether the edited values last only for this process, or are also written to disk for future restarts."></i>
+          </h3>
           <span class="chege-status-badge">Choose a save mode</span>
         </div>
         <div class="card-body">

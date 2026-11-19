@@ -2,9 +2,25 @@
 
 A personal, local-only AI coding agent. Chege Agent creates project workspaces, talks to a local (or compatible) LLM, streams tool calls live, asks before risky actions, and lets you inspect diffs and roll back automatically created checkpoints.
 
-**No login, no users, no tenants.** The service binds to `127.0.0.1` by default; anything that can reach the port has full access.
+**No login, no users, no tenants.** The service binds to `127.0.0.1` by default; anything that can reach the port has full access. The canonical local URL is **http://127.0.0.1:8001/**.
 
 If you only need to run it, this page is enough. Maintainers: [docs/README.md](docs/README.md).
+
+---
+
+## What's included (shipped)
+
+- **Tool governance & activity** — the [Tools page](/tools) lists all 20 tools with a plain-language purpose, risk category, enable/disable state, and `prompt_once` grants. Disabled tools are excluded from the schemas sent to the model **and** blocked at execution time; grants are recorded and enforced. A persistent **Recent tool activity** table shows every executed call with its timestamp, project/thread, action summary and result preview.
+- **Tree-style file browser** — the Files tab in the [Playground](/app) renders an expandable Linux `tree`-style view (`GET /api/v1/files/tree`) with folder/file/symlink icons and safe file opening. Path containment and symlink-escape protection are preserved.
+- **Visible run phase, reasoning & activity** — a run shows a live phase spinner/label, a separate **Reasoning** tab and chat bubble for thinking-capable models, plus an Activity tab of ordered, redacted SSE event summaries (including the server-authored `run.phase` event). Replay is resilient across reconnects via `Last-Event-ID`; raw server logs are never exposed.
+- **Settings tooltips & provider/model config** — the [Settings console](/settings) has plain-language tooltips on every control, provider panels for `llama_cpp` (llama.cpp), `ollama` (Ollama) and `openai` (OpenAI-compatible), installed-model dropdowns, a Hugging Face GGUF catalog and a custom download field. The [Models page](/models) shows tool/vision/OCR capability badges, downloads GGUF/Ollama models and switches the active provider when you pick a model.
+- **Unified context budget (8192)** — `default_context_window` (8192) is a real consumed setting: tool-schema tokens and a completion reserve are subtracted before building history. This agent-side prompt budget is distinct from the llama-server context (`CHEGE_LLAMACPP_CTX=8192` / `n_ctx`), which requires `bash scripts/llamacpp.sh restart` to change.
+
+## Quickstart / how it works
+
+1. Open **http://127.0.0.1:8001/** and go to the [Playground](/app) to create a project, start a thread (or fork one), and run a prompt.
+2. Use the [Tools page](/tools) to review what the agent can do, disable tools you don't want it to use, or enable a `prompt_once` grant.
+3. Tune defaults and provider endpoints in [Settings](/settings) (every control has a hover tooltip), and pick a model on [Models](/models).
 
 ---
 
@@ -12,17 +28,18 @@ If you only need to run it, this page is enough. Maintainers: [docs/README.md](d
 
 | Page | URL | Purpose |
 |---|---|---|
-| **Landing page** | [http://127.0.0.1:8000/](http://127.0.0.1:8000/) | What it is, 60-second quickstart, safety model, links |
-| **Playground** | [http://127.0.0.1:8000/app](http://127.0.0.1:8000/app) | Chat, streamed events, approvals, file/diff inspector |
-| **How it works** | [http://127.0.0.1:8000/guide](http://127.0.0.1:8000/guide) | Project → session → run → approve → inspect/revert |
-| **Setup & config** | [http://127.0.0.1:8000/setup](http://127.0.0.1:8000/setup) | Deploy flags, providers, database choices, SSH tunnel |
-| **Settings console** | [http://127.0.0.1:8000/settings](http://127.0.0.1:8000/settings) | Theme, sandbox, provider endpoints and agent defaults in one place |
-| **Models** | [http://127.0.0.1:8000/models](http://127.0.0.1:8000/models) | Download GGUF/Ollama models and switch what the agent uses |
-| **API reference** | [http://127.0.0.1:8000/api](http://127.0.0.1:8000/api) | `/api/v1` route and status-code reference |
-| **Safety model** | [http://127.0.0.1:8000/security](http://127.0.0.1:8000/security) | Loopback boundary, sandbox, approvals, checkpoints |
-| **System status** | [http://127.0.0.1:8000/status](http://127.0.0.1:8000/status) | Live health, provider and tool status |
-| **Swagger UI** | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) | Interactive OpenAPI (`/api/v1/openapi.json`) |
-| **Health** | `GET http://127.0.0.1:8000/healthz` | Liveness probe |
+| **Landing page** | [http://127.0.0.1:8001/](http://127.0.0.1:8001/) | What it is, 60-second quickstart, safety model, links |
+| **Playground** | [http://127.0.0.1:8001/app](http://127.0.0.1:8001/app) | Chat with timestamps/duration/token metadata, copy/resend, streamed events, run phase/Activity/Reasoning, tree-style Files tab, approvals, diffs, delete thread/project |
+| **Tools** | [http://127.0.0.1:8001/tools](http://127.0.0.1:8001/tools) | Review all 20 tools; enable/disable and `prompt_once` grants; persistent tool-call history |
+| **How it works** | [http://127.0.0.1:8001/guide](http://127.0.0.1:8001/guide) | Project → session → run → approve → inspect/revert |
+| **Setup & config** | [http://127.0.0.1:8001/setup](http://127.0.0.1:8001/setup) | Deploy flags, providers, database choices, SSH tunnel |
+| **Settings console** | [http://127.0.0.1:8001/settings](http://127.0.0.1:8001/settings) | Tooltips on every control, sandbox, provider config, agent defaults and context budget |
+| **Models** | [http://127.0.0.1:8001/models](http://127.0.0.1:8001/models) | Capability badges, Hugging Face GGUF catalog, downloads and active-model switching |
+| **API reference** | [http://127.0.0.1:8001/api](http://127.0.0.1:8001/api) | `/api/v1` route and status-code reference |
+| **Safety model** | [http://127.0.0.1:8001/security](http://127.0.0.1:8001/security) | Loopback boundary, sandbox, approvals, checkpoints |
+| **System status** | [http://127.0.0.1:8001/status](http://127.0.0.1:8001/status) | Live health, provider and tool status |
+| **Swagger UI** | [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs) | Interactive OpenAPI (`/api/v1/openapi.json`) |
+| **Health** | `GET http://127.0.0.1:8001/healthz` | Liveness probe |
 
 The UI is AdminLTE 4 with locally vendored assets, so it works offline.
 
@@ -54,18 +71,17 @@ bash scripts/deploy.sh --with-ollama
 ```bash
 git clone https://github.com/Niccher/Chege-Agent.git
 cd "Chege Agent"
-bash scripts/deploy.sh
+bash scripts/deploy.sh --isolated
 ```
 
-The script syncs `.env`, validates Compose, builds the app and sandbox images, starts the stack on loopback, waits for `/healthz`, and prints all URLs. It never publishes infrastructure ports or changes your Git checkout.
+`--isolated` is the supported local deploy path: it recreates **only** `chege-local-agent` and never touches unrelated containers. The script syncs `.env`, validates Compose, builds the app and sandbox images, starts the stack on loopback, waits for `/healthz`, and prints all URLs. It never publishes infrastructure ports or changes your Git checkout. The app is then at **http://127.0.0.1:8001/**.
 
-Common variants:
+Common variants (`--isolated` remains the supported local path):
 
 ```bash
-bash scripts/deploy.sh                    # DEFAULT: Docker + llama.cpp precompiled + SQLite
+bash scripts/deploy.sh --isolated         # supported local deploy: only chege-local-agent
 bash scripts/deploy.sh --with-postgres    # internal Postgres, port 5432 NOT published
 bash scripts/deploy.sh --with-ollama      # switch provider to host Ollama on :11434
-bash scripts/deploy.sh --isolated         # separate stack that never touches other containers
 bash scripts/deploy.sh --local-sandbox    # explicit local execution, no isolation
 bash scripts/deploy.sh --hard-reset       # tear down containers first
 bash scripts/deploy.sh doctor             # preflight checks only
@@ -85,14 +101,14 @@ If this machine already runs other Docker stacks (or an older Chege stack in the
 bash scripts/deploy.sh --isolated
 ```
 
-This uses `docker-compose.isolated.yml` and `COMPOSE_PROJECT_NAME=chege-local`, giving unique container names (`chege-local-agent`, `chege-local-proxy`) and a private network (`chege-local_chege-net`). It never passes `--remove-orphans`, so existing containers are not stopped, recreated, or removed. On this machine the app is at `http://127.0.0.1:8001/`.
+This uses `docker-compose.isolated.yml` and `COMPOSE_PROJECT_NAME=chege-local`, recreating **only** `chege-local-agent` on a private network (`chege-local_chege-net`). It never passes `--remove-orphans`, so existing containers are not stopped, recreated, or removed. On this machine the app is at `http://127.0.0.1:8001/`.
 
 Manual Compose (`docker compose up --build -d`) still works, but the deploy script is the supported path.
 
 For remote use, keep the loopback binding and tunnel in:
 
 ```bash
-ssh -N -L 8000:127.0.0.1:8000 user@your-machine
+ssh -N -L 8001:127.0.0.1:8001 user@your-machine
 ```
 
 ---
@@ -110,8 +126,8 @@ Only versioned routes exist: **`/api/v1/*`**. Unversioned `/api/*` aliases and `
 
 ## Safety defaults
 
-- `auto_edit` (default): ordinary file writes run automatically; destructive tools (`delete_file`, `git_commit`, `process_kill`), non-allowlisted shell commands, network and process tools require approval. The command allowlist compares exact `argv` tokens and rejects shell metacharacters.
-- `ask_all`: confirm every non-read tool. `full_auto`: no prompts — use only in a throwaway workspace.
+- Approvals default to `auto_edit`: ordinary file writes run automatically; destructive tools (`delete_file`, `git_commit`, `process_kill`), non-allowlisted shell commands, network and process tools require approval. The command allowlist compares exact `argv` tokens and rejects shell metacharacters. `ask_all` and `full_auto` are selectable per run in the Playground; `full_auto` skips risk-based prompts but never bypasses tool governance (disabled tools still block, `prompt_once` grants still required).
+- A tool that is disabled on the [Tools page](/tools) is always blocked, regardless of approval state.
 - Every run creates an automatic checkpoint. Revert saves dirty work to a safety stash first.
 - The Docker backend uses `tcp://docker-socket-proxy:2375` with a per-project container (`--network none`, dropped capabilities, read-only root filesystem, PID/memory/CPU limits). If the proxy is unavailable the run fails loudly; it does **not** silently execute locally. `--local-sandbox` is the explicit no-isolation opt-in.
 
@@ -124,8 +140,10 @@ Only versioned routes exist: **`/api/v1/*`**. Unversioned `/api/*` aliases and `
 | Variable | Default | Purpose |
 |---|---|---|
 | `CHEGE_HOST` | `127.0.0.1` | Loopback binding. Keep it. |
-| `CHEGE_PORT` | `8000` | Host port mapped to the container. |
+| `CHEGE_PORT` | `8001` | Host port mapped to the container (canonical local URL `http://127.0.0.1:8001/`). |
 | `CHEGE_DATABASE_URL` | empty | Empty = SQLite; set by the Postgres overlay. |
+| `CHEGE_DEFAULT_CONTEXT_WINDOW` | `8192` | Agent-side prompt budget; tool-schema tokens and a completion reserve are subtracted before building history. |
+| `CHEGE_LLAMACPP_CTX` | `8192` | llama-server context (`n_ctx`); separate from the agent-side budget and requires `bash scripts/llamacpp.sh restart` to change. |
 | `CHEGE_SANDBOX_BACKEND` | `docker` | `docker` (isolated) or `local` (explicit opt-in). |
 | `CHEGE_DOCKER_SOCKET_PROXY` | `tcp://docker-socket-proxy:2375` | Restricted Docker API endpoint. |
 | `CHEGE_DEFAULT_SANDBOX_IMAGE` | `chege-sandbox-polyglot:latest` | Built from `sandbox/Dockerfile` by deploy.sh. |
@@ -141,19 +159,21 @@ Full reference: [docs/user/configuration.md](docs/user/configuration.md).
 
 ### Settings console
 
-The [Settings console](/settings) is the single place to change runtime defaults: theme (stored in this browser), sandbox backend, provider endpoints/API key, and agent limits. It exposes three save modes:
+The [Settings console](/settings) is the single place to change runtime defaults: theme (stored only in this browser as `lte-theme`), sandbox backend, provider endpoints/API key, and agent limits. Every control has a plain-language tooltip (25 total) shown on hover. Provider panels switch between `llama_cpp`, `ollama` and `openai` based on `default_provider`; only the selected runner's settings are used, though the Playground can still override the provider for a run. Fields include `default_temperature` (0.2), `default_top_p` (0.9), `default_context_window` (8192), `max_steps` (50), `run_timeout_seconds` (600), `provider_timeout_seconds` (120), a read-only `sandbox_backend` (`docker`), the llama.cpp/Ollama/OpenAI-compatible endpoints and models, and a masked OpenAI API key. The UI labels which controls require a restart: llama-server knobs (`llamacpp_ctx`, `llamacpp_model`, host/port, `n_gpu_layers`) take effect only after `bash scripts/llamacpp.sh restart`.
+
+It exposes three save modes:
 
 | Action | Endpoint | Effect |
 |---|---|---|
-| Apply now | `PATCH /api/v1/settings` | Runtime only — lost on restart |
+| Apply now | `PATCH /api/v1/settings` | Applies to the running process only — cleared on restart |
 | Save as defaults | `PUT /api/v1/settings/defaults` | Applies now **and** persists to `data/settings.json` |
-| Clear saved defaults | `DELETE /api/v1/settings/defaults` | Removes the file; restart returns to env/`.env` values |
+| Clear saved defaults | `DELETE /api/v1/settings/defaults` | Clears saved defaults; runtime values remain until restart |
 
-Persisted defaults are loaded after env/`.env` on startup, so they win over those values. The file is written atomically with `0600` permissions; API keys are masked in every response and never returned in plain text. Host, port and database binding are deploy-time values and are intentionally excluded — change those in `.env` and redeploy with `bash scripts/deploy.sh --isolated`.
+`GET /api/v1/settings` returns the masked current settings. Persisted defaults are loaded after env/`.env` on startup, so they win over those values. The file is written atomically with `0600` permissions; the OpenAI API key is masked and never echoed back. Host, port and database binding are deploy-time values and are intentionally excluded — change those in `.env` and redeploy with `bash scripts/deploy.sh --isolated`.
 
 ### Model manager
 
-The [Models page](/models) lists installed models, downloads new ones, and switches what the agent uses. GGUF files are downloaded to the host's `.llamacpp/models` directory by a small local control service (`scripts/modelctl.py`, port `8081`, bound only to loopback and the Docker bridge). Selecting a GGUF restarts `llama-server` with that file; Ollama models are pulled and switched through its native API. The selection is saved immediately to `data/settings.json` and used for all new runs, with a per-run override available in the Playground.
+The [Models page](/models) lists installed models with **Tools**, **Vision/OCR**, **No tools** or **Unknown** capability badges, downloads new ones, and switches what the agent uses. GGUF files are downloaded to the host's `.llamacpp/models` directory by a small local control service (`scripts/modelctl.py`, port `8081`, bound only to loopback and the Docker bridge). Selecting a GGUF restarts `llama-server` with that file; Ollama models are pulled and switched through its native API. The selection also makes its provider active, is saved immediately to `data/settings.json`, and is used for all new runs, with a per-run override available in the Playground. Gated/private Hugging Face downloads can use an optional token that is never persisted.
 
 ```bash
 bash scripts/llamacpp.sh serve     # start only the model control service
@@ -168,7 +188,7 @@ bash scripts/llamacpp.sh select /path/to/model.gguf   # switch llama.cpp model m
 |---|---|---|
 | Cannot reach llama.cpp | Bound to loopback only | Start with `--host 0.0.0.0 --port 8080`. |
 | Cannot reach Ollama | Host firewall/binding | `OLLAMA_HOST=0.0.0.0:11434 ollama serve`. |
-| Port 8000 busy | Conflicting process | Change `CHEGE_PORT` in `.env` and redeploy. |
+| Port 8001 busy | Conflicting process | Change `CHEGE_PORT` in `.env` and redeploy with `bash scripts/deploy.sh --isolated`. |
 | Sandbox proxy unreachable | Docker daemon/socket proxy down | `bash scripts/deploy.sh logs docker-socket-proxy`. |
 | Container unhealthy | Startup delay | `bash scripts/deploy.sh logs chege-agent`. |
 
@@ -184,4 +204,4 @@ See [docs/user/troubleshooting.md](docs/user/troubleshooting.md).
 - [Local development](docs/engineering/local-development.md)
 - [Testing](docs/engineering/testing.md)
 
-Tests: `./py-env/bin/python -m pytest -q`.
+Tests: `./py-env/bin/python -m pytest -q` (40 passed, 2 warnings).

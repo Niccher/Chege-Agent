@@ -31,26 +31,28 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 
 ---
 
-## 2. Port 8000 Already Allocated
+## 2. Port 8001 Already Allocated
+
+The canonical local URL is `http://127.0.0.1:8001/`; a normal isolated deploy binds `127.0.0.1:8001`.
 
 ### Symptom:
-Docker Compose fails with:
+The isolated deploy fails with:
 ```text
-Error response from daemon: driver failed programming external connectivity on endpoint chege-agent: Bind for 127.0.0.1:8000 failed: port is already allocated
+Error response from daemon: driver failed programming external connectivity on endpoint chege-local-agent: Bind for 127.0.0.1:8001 failed: port is already allocated
 ```
 
 ### Solution:
-Identify the conflicting process or change Chege Agent's external port:
+Find what is already using 8001 and free it if possible:
 ```bash
-# Check what is listening on 8000
-sudo lsof -i :8000
-# Alternatively, change host port in .env
-CHEGE_PORT=9200
+sudo lsof -i :8001
 ```
-Then restart:
+
+Redeploy with the canonical command (it recreates only `chege-local-agent` and leaves other containers untouched):
 ```bash
-docker compose up -d
+bash scripts/deploy.sh --isolated
 ```
+
+If 8001 must stay occupied by another app, set a different `CHEGE_PORT` in `.env`, use that port in the URL you open, and redeploy with `bash scripts/deploy.sh --isolated`. Do not fall back to a raw `docker compose up`; `--isolated` is the supported deploy path.
 
 ---
 
@@ -67,10 +69,10 @@ Ensure the host user is in the `docker` group and the daemon is active. Do **not
 
 ```bash
 sudo usermod -aG docker $USER   # log out and back in
-bash scripts/deploy.sh logs docker-socket-proxy
+bash scripts/deploy.sh logs chege-local-proxy
 ```
 
-If the proxy is reachable but runs fail with a sandbox error, rebuild the sandbox image with `bash scripts/deploy.sh` or inspect `bash scripts/deploy.sh logs chege-agent`.
+If the proxy is reachable but runs fail with a sandbox error, rebuild the sandbox image with `bash scripts/deploy.sh --isolated` or inspect `bash scripts/deploy.sh logs chege-local-agent`.
 
 ---
 
@@ -84,9 +86,50 @@ sqlite3.OperationalError: database is locked
 
 ### Solution:
 Chege Agent enables Write-Ahead Logging (WAL) by default. If a previous container crash left an open lock:
-1. Stop the container: `docker compose down`
+1. Stop the stack: `bash scripts/deploy.sh stop`
 2. Remove any lingering shm/wal lock files if corrupted:
    ```bash
    ls -la ./data/chege.db*
    ```
-3. Restart cleanly: `docker compose up -d`
+3. Restart cleanly with `bash scripts/deploy.sh --isolated`.
+
+---
+
+## 5. Context overflow / model forgets earlier messages
+
+### Symptom:
+A run fails with a context-length error, the model seems to forget the start of the conversation, or history is truncated as a thread grows.
+
+### Cause:
+There are two separate limits:
+- The **agent prompt budget** `default_context_window` (default `8192`). Tool-schema overhead and a completion reserve are subtracted before conversation history is added.
+- The **llama-server context** `CHEGE_LLAMACPP_CTX` / `llamacpp_ctx` (`n_ctx`), also `8192` by default.
+
+### Solution:
+1. Start a **new thread** (or fork from a safe message) to shorten the history. This is the quickest fix when a thread has simply grown too long.
+2. If you changed `llamacpp_ctx` (or `CHEGE_LLAMACPP_CTX` in `.env`), restart the host server so the new context size takes effect:
+   ```bash
+   bash scripts/llamacpp.sh restart
+   ```
+   Without this restart, llama-server keeps its old context.
+3. Keep the agent budget at or below the server context size. `default_context_window` changes apply to the next run; llama-server knobs do not.
+4. If you do not need every tool, disable some on `/tools` to reduce the per-step tool schema.
+
+Check `/status` or `/settings` for the current values. See [configuration.md](configuration.md) for the full field list.
+
+---
+
+## 6. A tool does not run
+
+### Symptom:
+A tool call is skipped, produces no output, or the run reports that a tool is disabled.
+
+### Cause:
+- The tool is **disabled** on the [Tools page](http://127.0.0.1:8001/tools) (`enabled=false`). Disabled tools are left out of the schemas sent to the model and are blocked at execution time, so even a text-protocol tool-call injection cannot trigger them.
+- The tool uses `grant_mode=prompt_once` and its one-time grant for this run was not approved.
+
+### Solution:
+1. Open `/tools`, search for the tool, and confirm its **Enabled** toggle is on. Changes persist in `tool_settings`; all tools default to enabled.
+2. If its grant mode is `prompt_once`, approve the grant when the run asks for it. The grant is recorded in `tool_grants` and applies for that run.
+3. Re-run the task. Approvals default to `auto_edit` (`ask_all`/`full_auto` are also selectable); a disabled tool or required grant is blocked regardless of approval mode.
+4. If it still does nothing, check the run's **Activity** tab in `/app` for the structured tool event summary (raw server logs are not exposed) and confirm the run reached the tool phase at all.

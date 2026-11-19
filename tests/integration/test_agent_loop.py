@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 from typing import AsyncIterator
 import pytest
@@ -112,6 +113,7 @@ async def test_agent_loop_auto_executes_safe_tools(setup_test_app):
     with Session(engine) as db:
         run = db.get(Run, run_id)
         assert run.status == "completed"
+        assert run.completed_at is not None
 
         messages = list(db.exec(select(Message).where(Message.session_id == sess.id)).all())
         # Should have: user msg, assistant msg with tool_calls, tool result msg, final assistant msg
@@ -122,6 +124,19 @@ async def test_agent_loop_auto_executes_safe_tools(setup_test_app):
         assert len(tool_results) == 1
         assert tool_results[0].tool_name == "write_file"
         assert tool_results[0].tool_call_id == "tc_1"
+
+        final_assistant = [m for m in messages if m.role == "assistant" and not m.tool_calls_json][-1]
+        assert final_assistant.metrics_json
+
+        # Auto-approved calls are also persisted as an audit trail.
+        records = list(db.exec(select(ToolCall).where(ToolCall.run_id == run_id)).all())
+        assert len(records) == 1
+        assert records[0].tool_name == "write_file"
+        assert records[0].status == "completed"
+        assert "Written" in (records[0].result or "")
+
+    # Completed runs must not retain the provider instance for the process lifetime.
+    assert run_id not in run_mgr._providers
 
     # Verify file was created on disk
     created_file = workspace_root / "config.json"
@@ -180,3 +195,55 @@ async def test_agent_loop_pauses_for_high_risk_approval(setup_test_app):
         assert len(pending_calls) == 1
         assert pending_calls[0].tool_name == "run_command"
         assert pending_calls[0].status == "pending"
+
+    # Awaiting-approval runs keep their provider for the resume path.
+    assert run_id in run_mgr._providers
+
+    # A run paused for approval must still be cancellable.
+    assert await run_mgr.cancel_run(run_id) is True
+    with Session(engine) as db:
+        cancelled = db.get(Run, run_id)
+        assert cancelled.status == "cancelled"
+        assert cancelled.completed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_saves_thinking_and_metrics(setup_test_app):
+    proj, sess, tmp_path, engine = setup_test_app
+    workspace_root = tmp_path / "workdir" / proj.slug
+    workspace_root.mkdir(parents=True, exist_ok=True)
+
+    provider = FakeScriptedProvider([[
+        ChatChunk(delta_thinking="Let me think about this."),
+        ChatChunk(delta_content="The answer is 42."),
+    ]])
+    run_mgr = RunManager(provider=provider, sandbox_factory=lambda root, slug: LocalSandbox(root))
+
+    run_id = "test-run-thinking"
+    with Session(engine) as db:
+        db.add(Run(id=run_id, session_id=sess.id, status="running"))
+        db.commit()
+
+    await run_mgr._execute_loop(
+        run_id=run_id,
+        session_id=sess.id,
+        user_prompt="Think then answer",
+        model_name="fake-model",
+        max_steps=5,
+        policy_mode="auto_edit",
+        cancel_evt=asyncio.Event(),
+    )
+
+    with Session(engine) as db:
+        run = db.get(Run, run_id)
+        assert run.status == "completed"
+        assert run.completed_at is not None
+        assistant = [
+            m for m in db.exec(select(Message).where(Message.session_id == sess.id)).all()
+            if m.role == "assistant"
+        ][-1]
+        assert assistant.thinking == "Let me think about this."
+        assert assistant.content == "The answer is 42."
+        metrics = json.loads(assistant.metrics_json)
+        assert "thinking_ms" in metrics
+        assert metrics["run_id"] == run_id

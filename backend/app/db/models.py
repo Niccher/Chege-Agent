@@ -96,6 +96,27 @@ class Event(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class ToolSetting(SQLModel, table=True):
+    __tablename__ = "tool_settings"
+
+    tool_name: str = Field(primary_key=True)
+    enabled: bool = Field(default=True)
+    grant_mode: str = Field(default="none")  # none | prompt_once
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class ToolGrant(SQLModel, table=True):
+    __tablename__ = "tool_grants"
+
+    id: str = Field(default_factory=generate_uuid, primary_key=True)
+    run_id: str = Field(index=True, foreign_key="runs.id")
+    tool_name: str = Field(index=True)
+    scope: str = Field(default="run")  # run | once
+    status: str = Field(default="granted", index=True)  # granted | consumed | revoked
+    created_at: datetime = Field(default_factory=utc_now)
+    expires_at: Optional[datetime] = Field(default=None)
+
+
 class ApprovalPolicy(SQLModel, table=True):
     __tablename__ = "approval_policies"
 

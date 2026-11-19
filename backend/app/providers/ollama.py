@@ -15,9 +15,10 @@ logger = get_logger("provider.ollama")
 class OllamaProvider(Provider):
     """Asynchronous Ollama provider implementation with context sizing and capability inspection."""
 
-    def __init__(self, base_url: str = "http://host.docker.internal:11434"):
+    def __init__(self, base_url: str = "http://host.docker.internal:11434", timeout: float = 120.0):
         self.base_url = base_url.rstrip("/")
-        self.client = ollama.AsyncClient(host=self.base_url, timeout=120.0)
+        self.timeout = float(timeout or 120.0)
+        self.client = ollama.AsyncClient(host=self.base_url, timeout=self.timeout)
 
     async def list_models(self) -> list[ModelInfo]:
         try:

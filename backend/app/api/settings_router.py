@@ -16,7 +16,15 @@ POSITIVE_INTS = {
     "default_context_window": 1024,
     "max_steps": 1,
     "run_timeout_seconds": 10,
+    "provider_timeout_seconds": 5,
+    "llamacpp_ctx": 1024,
+    "ollama_num_ctx": 1024,
 }
+FLOATS = {
+    "default_temperature": (0.0, 2.0),
+    "default_top_p": (0.0, 1.0),
+}
+OPTIONAL_INTS = {"openai_max_tokens": 1}
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -27,10 +35,17 @@ class UpdateSettingsRequest(BaseModel):
     openai_api_key: str | None = None
     sandbox_backend: str | None = None
     default_context_window: int | None = None
+    default_temperature: float | None = None
+    default_top_p: float | None = None
     max_steps: int | None = None
     run_timeout_seconds: int | None = None
+    provider_timeout_seconds: int | None = None
     llamacpp_model: str | None = None
     ollama_model: str | None = None
+    llamacpp_ctx: int | None = None
+    ollama_num_ctx: int | None = None
+    ollama_keep_alive: str | None = None
+    openai_max_tokens: int | None = None
 
 
 def _http_url(value: object, name: str) -> str:
@@ -62,6 +77,12 @@ def _validated_updates(request: UpdateSettingsRequest) -> dict:
                 if not value or any(c in value for c in ("\n", "\r", "\0", "..")):
                     raise HTTPException(400, detail=f"{key} is not a valid model name or path")
                 updates[key] = value
+        elif key == "ollama_keep_alive":
+            if value is not None:
+                value = value.strip()
+                if not value or any(c in value for c in ("\n", "\r", "\0")):
+                    raise HTTPException(400, detail="ollama_keep_alive is not valid")
+                updates[key] = value
         elif value is not None:
             updates[key] = value
 
@@ -77,6 +98,17 @@ def _validated_updates(request: UpdateSettingsRequest) -> dict:
             raise HTTPException(400, detail="sandbox_backend must be docker or local")
     for key, minimum in POSITIVE_INTS.items():
         if key in updates:
+            value = updates[key]
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise HTTPException(400, detail=f"{key} must be an integer >= {minimum}")
+    for key, (low, high) in FLOATS.items():
+        if key in updates:
+            value = updates[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not (low <= value <= high):
+                raise HTTPException(400, detail=f"{key} must be a number between {low} and {high}")
+            updates[key] = float(value)
+    for key, minimum in OPTIONAL_INTS.items():
+        if key in updates and updates[key] is not None:
             value = updates[key]
             if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
                 raise HTTPException(400, detail=f"{key} must be an integer >= {minimum}")

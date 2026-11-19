@@ -1,0 +1,94 @@
+/* Tool governance page. */
+.chege-callout {
+  display: flex;
+  gap: .75rem;
+  align-items: flex-start;
+  border: 1px solid var(--chege-border);
+  border-left: .35rem solid var(--chege-info);
+  border-radius: .6rem;
+  padding: .85rem 1rem;
+  background: var(--chege-info-soft);
+  color: var(--chege-ink);
+}
+.chege-callout > i { color: var(--chege-info); margin-top: .15rem; }
+.chege-callout code { color: var(--chege-ink); }
+
+.chege-tool-search { max-width: 360px; }
+
+.chege-tool-card {
+  border: 1px solid var(--chege-border);
+  border-radius: .8rem;
+  background: var(--chege-surface);
+  padding: 1rem;
+  height: 100%;
+  box-shadow: var(--chege-shadow);
+}
+.chege-tool-card.is-disabled { opacity: .72; }
+.chege-tool-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+.chege-tool-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 800;
+  font-size: .95rem;
+  color: var(--chege-heading);
+  word-break: break-all;
+}
+.chege-tool-purpose {
+  font-size: .85rem;
+  color: var(--chege-ink);
+  line-height: 1.5;
+  min-height: 2.6rem;
+}
+.chege-tool-desc {
+  font-size: .76rem;
+  color: var(--chege-muted);
+  border-left: 2px solid var(--chege-border);
+  padding-left: .55rem;
+  margin: .5rem 0 .8rem;
+  line-height: 1.45;
+}
+.chege-tool-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  align-items: center;
+  border-top: 1px solid var(--chege-border);
+  padding-top: .75rem;
+}
+.chege-tool-controls label {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .82rem;
+  font-weight: 600;
+  margin: 0;
+  cursor: pointer;
+}
+.chege-tool-controls select { width: auto; font-size: .82rem; }
+.chege-tool-save { margin-left: auto; }
+.chege-tool-card.is-dirty { border-color: var(--chege-warning); }
+.chege-tool-card.is-saved { border-color: var(--chege-success); }
+
+.chege-restart-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: .15rem .55rem;
+  font-size: .72rem;
+  font-weight: 700;
+}
+.chege-mode-none { color: var(--chege-success); background: var(--chege-success-soft); border: 1px solid var(--chege-success); }
+.chege-mode-grant { color: var(--chege-warning); background: var(--chege-warning-soft); border: 1px solid var(--chege-warning); }
+
+#activity .table-responsive { max-height: 560px; overflow: auto; }
+#activity code { white-space: nowrap; }
+#activity td { vertical-align: top; }
+
+@media (max-width: 991.98px) {
+  .chege-tool-search { max-width: none; }
+}

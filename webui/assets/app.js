@@ -138,6 +138,7 @@
     ['/api', 'API'],
     ['/security', 'Safety'],
     ['/settings', 'Settings'],
+    ['/tools', 'Tools'],
     ['/models', 'Models'],
     ['/status', 'Status'],
   ];
@@ -194,6 +195,7 @@
               ${navItem('/', 'fas fa-house', 'Overview', active)}
               ${navItem('/guide', 'fas fa-book', 'How it works', active)}
               ${navItem('/app', 'fas fa-terminal', 'Playground', active)}
+              ${navItem('/tools', 'fas fa-wrench', 'Tools & activity', active)}
               ${navItem('/api', 'fas fa-plug', 'API reference', active)}
               ${navItem('/settings', 'fas fa-sliders', 'Settings console', active)}
               ${navItem('/models', 'fas fa-brain', 'Models', active)}
@@ -215,7 +217,7 @@
           <span><strong>Chege Agent</strong> · personal, local-only · no login, no telemetry</span>
           <span class="chege-footer-links">
             <a href="/guide">Guide</a> · <a href="/setup">Setup</a> · <a href="/settings">Settings</a> ·
-            <a href="/models">Models</a> · <a href="/api">API</a> · <a href="/security">Safety</a> · <a href="/status">Status</a> ·
+            <a href="/tools">Tools</a> · <a href="/models">Models</a> · <a href="/api">API</a> · <a href="/security">Safety</a> · <a href="/status">Status</a> ·
             <a href="/docs" target="_blank" rel="noopener">Swagger</a> · <a href="/healthz">Health</a>
           </span>
         </div>`;

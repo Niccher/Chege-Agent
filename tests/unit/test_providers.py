@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from backend.app.core.config import Settings
-from backend.app.providers.base import ModelInfo
 from backend.app.providers.factory import get_provider
 from backend.app.providers.llama_cpp import LlamaCppProvider
 from backend.app.providers.ollama import OllamaProvider

@@ -8,11 +8,14 @@ This directory documents the architecture, contracts and operations of **Chege A
 
 | Area | Implementation |
 |---|---|
-| Runtime | Personal, local-only service. No auth, users or tenants. `127.0.0.1` bind and loopback Compose port are part of the security boundary. |
-| Deployment | `bash scripts/deploy.sh` is the supported one-command path; manual Compose remains available. |
-| UI | AdminLTE 4.10.2 layout with locally vendored assets. Real pages: `/`, `/app`, `/guide`, `/setup`, `/api`, `/security`, `/status`; Swagger stays at `/docs`. |
+| Runtime | Personal, local-only service. No auth, users or tenants. `127.0.0.1` bind and loopback Compose port are part of the security boundary. Canonical local URL: **http://127.0.0.1:8001/**. |
+| Deployment | Deploy with `bash scripts/deploy.sh --isolated`; it recreates only `chege-local-agent` and never touches unrelated containers. Manual Compose remains available. |
+| UI | AdminLTE 4.10.2 layout with locally vendored assets. Shipped pages: `/`, `/app`, `/guide`, `/setup`, `/api`, `/security`, `/status`, `/tools`, `/settings`, `/models`; Swagger stays at `/docs`. |
 | REST | `/api/v1/*` only. Legacy `/api/*` aliases removed. `201 + Location` on creates, `202 + Location` on runs, `409` for duplicates. |
-| Approvals | `auto_edit` uses exact-argv command allowlisting and keeps destructive tools gated. |
+| Approvals | Default `auto_edit` with exact-argv command allowlisting; destructive tools stay gated. `ask_all` and `full_auto` are selectable per run; governance (disabled tools and `prompt_once` grants) always applies, even in `full_auto`. |
+| Tool governance (shipped) | `/tools` lists all 20 tools with plain-language purpose, risk, enable/disable and `prompt_once` grants. Disabled tools are excluded from model schemas and blocked at execution; grants are recorded in `tool_grants`. |
+| Context budget (shipped) | `default_context_window` (8192) is consumed by the context builder after subtracting tool-schema tokens and a completion reserve; llama-server context is the separate `CHEGE_LLAMACPP_CTX=8192`. |
+| Observability (shipped) | Structured, redacted SSE events including `run.phase`; `/app` shows a phase indicator and Activity tab. Replay honors `Last-Event-ID`; raw server logs are not exposed. |
 | Checkpoints | Created automatically at run start; revert saves dirty work to a safety stash first. |
 | Database | SQLite default; opt-in internal Postgres via `bash scripts/deploy.sh --with-postgres` (no published port). |
 | Sandbox | Docker SDK through `tcp://docker-socket-proxy:2375` and a per-project container. No silent fallback; `--local-sandbox` is explicit no-isolation mode. |
@@ -24,6 +27,10 @@ This directory documents the architecture, contracts and operations of **Chege A
 | Topic | Description | Link |
 |---|---|---|
 | **User & Operator Guides** | Setup, configuration and troubleshooting. | [Setup and run](user/setup-and-run.md) · [Configuration](user/configuration.md) · [Troubleshooting](user/troubleshooting.md) |
+| **Settings & Model Config (shipped)** | `/settings` tooltips (25), provider panels (`llama_cpp`/`ollama`/`openai`), save modes; `/models` for GGUF/Ollama downloads. | [Configuration](user/configuration.md) · [Settings](/settings) · [Models](/models) |
+| **Tools Governance (shipped)** | `/tools` list/filter of 20 tools, enable/disable and `prompt_once` grants, execution-time enforcement. | [Tools](/tools) · [FastAPI Service](services/fastapi.md) · [API Contract](api/contract.md) |
+| **File Tree Browser (shipped)** | `GET /api/v1/files/tree` and the expandable Files tab in `/app`. | [API Contract](api/contract.md) · [Playground](/app) |
+| **Observability & SSE (shipped)** | `run.phase` events, Activity tab, structured redacted summaries, `Last-Event-ID` replay resilience. | [Communication](architecture/communication.md) · [API Contract](api/contract.md) |
 | **Implementation Plan** | Capability matrix, decisions and phased delivery status. | [Implementation Plan](engineering/implementation-plan.md) |
 | **Architecture Overview** | Container boundaries, components and data flow. | [Architecture Overview](architecture/overview.md) |
 | **Communication & Streaming** | REST/SSE protocols and sequence diagrams. | [Communication](architecture/communication.md) |

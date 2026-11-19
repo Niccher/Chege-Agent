@@ -31,29 +31,44 @@
     </div></section>
     <section class="app-content"><div class="container-fluid">
       <div class="callout callout-danger"><b>No authentication, by design.</b> Chege Agent is a single-user local service.
-        Anyone who can reach port 8000 has full API access, including <code>full_auto</code> tool execution.
-        Keep the loopback binding and use an SSH tunnel for remote access.</div>
+        Anyone who can reach port 8001 has full API access. Keep the loopback binding
+        (<code>CHEGE_HOST=127.0.0.1</code>); use an SSH tunnel for remote access and never publish the port to the
+        public internet. Tool availability is governed by the enable/disable and grant rules below.</div>
 
       <div class="row">
         <div class="col-lg-6">
           <div class="card card-outline card-primary h-100"><div class="card-header"><h3 class="card-title">Layers of protection</h3></div>
             <div class="card-body">
               <h6><i class="fas fa-network-wired"></i> Network boundary</h6>
-              <p class="text-muted">Compose publishes <code>127.0.0.1:8000:8000</code> only; Postgres has no host port at all.</p>
+              <p class="text-muted">Compose publishes only <code>127.0.0.1:8001</code> on the host; Postgres has no host port
+                at all. The API is reachable at <code>http://127.0.0.1:8001/</code>.</p>
               <h6><i class="fas fa-lock"></i> Path containment</h6>
               <p class="text-muted">Every file target is canonicalised and rejected if it escapes
                 <code>workdir/{project}</code> (traversal, symlinks, absolute paths, NUL bytes).</p>
               <h6><i class="fas fa-shield-halved"></i> Approval gates</h6>
-              <p class="text-muted"><code>auto_edit</code> permits ordinary writes and an exact allowlist of shell-free
-                commands (<code>pytest</code>, <code>git status</code>, …). Deletes, commits, process kills, network
-                and other shell commands require confirmation.</p>
+              <p class="text-muted"><code>auto_edit</code> (the default) permits ordinary writes and an exact allowlist of
+                shell-free commands (<code>pytest</code>, <code>git status</code>, …). Deletes, commits, process kills,
+                network and other shell commands require confirmation. <code>ask_all</code> asks before every tool, and
+                <code>full_auto</code> skips risk-based prompts — but neither can bypass tool governance below.</p>
+              <h6><i class="fas fa-wrench"></i> Tool governance <span class="chege-status-badge is-ok">Shipped</span></h6>
+              <p class="text-muted">Every tool has an <code>enabled</code> flag and a <code>grant_mode</code>
+                (<code>none</code> or <code>prompt_once</code>). Disabled tools are removed from the tool schemas sent to
+                the model <em>and</em> blocked again at execution time — a text-protocol tool-call injection cannot bypass
+                disabling. <code>prompt_once</code> asks you for a grant once per run before that tool executes; grants
+                are recorded in the <code>tool_grants</code> table for auditing. Governance is checked before the approval
+                policy, so disabled tools always block and grants are required even under <code>full_auto</code>. Names and
+                descriptions shown in the UI come from trusted
+                server-side metadata, never model output. Manage tools on the <a href="/tools">Tools page</a>.</p>
               <h6><i class="fas fa-box"></i> Sandbox backend</h6>
               <p class="text-muted">The Docker backend is intended to use the restricted socket proxy
                 (<code>tecnativa/docker-socket-proxy</code>) and a per-project container. If you run with
                 <code>--local-sandbox</code>, there is no process isolation — treat the agent as trusted code.</p>
-              <h6 class="mb-0"><i class="fas fa-rotate-left"></i> Automatic checkpoints</h6>
-              <p class="text-muted mb-0">Each run snapshots the workspace first; revert saves dirty work to a safety stash
+              <h6><i class="fas fa-rotate-left"></i> Automatic checkpoints</h6>
+              <p class="text-muted">Each run snapshots the workspace first; revert saves dirty work to a safety stash
                 before restoring, so unrelated edits are not lost.</p>
+              <h6 class="mb-0"><i class="fas fa-list-check"></i> Activity feed</h6>
+              <p class="text-muted mb-0">Raw server logs are <b>not exposed</b>. The playground Activity tab shows ordered,
+                structured and redacted event summaries (phases, start, completion and tool events) instead.</p>
             </div>
           </div>
         </div>
@@ -66,15 +81,18 @@
                 <tr><td>Prompt injection → file escape</td><td>Path canonicalisation and 403 on escapes.</td></tr>
                 <tr><td>Prompt injection → shell</td><td>Exact-argv allowlist; approval for everything else.</td></tr>
                 <tr><td>Secret leakage into chat</td><td>Secret scrubbing before events, messages and logs are stored.</td></tr>
+                <tr><td>Prompt injection → disabled tool</td><td>Excluded from model tool schemas <em>and</em> blocked at execution; text tool-calls cannot bypass disabling.</td></tr>
+                <tr><td>Unwanted tool use</td><td><code>prompt_once</code> grant per run; grants recorded in <code>tool_grants</code> for auditing.</td></tr>
+                <tr><td>Raw log exposure in the UI</td><td>Not exposed; Activity uses structured, redacted event summaries only.</td></tr>
                 <tr><td>Destructive revert</td><td>Safety stash before restore; no unconditional loss of dirty work.</td></tr>
                 <tr><td>Multi-worker event replay</td><td>Currently process-local sequence state — run a single worker.</td></tr>
               </tbody>
             </table></div>
           </div>
           <div class="callout callout-warning mt-4 mb-0"><b>Operator checklist:</b>
-            keep <code>CHEGE_HOST=127.0.0.1</code>; don't forward port 8000 through a public reverse proxy without
-            adding your own authentication; review approval prompts; back up <code>data/</code> (SQLite) or
-            <code>pg_dump</code> (Postgres).</div>
+            keep <code>CHEGE_HOST=127.0.0.1</code> and port 8001 on loopback only — use an SSH tunnel for remote access,
+            never a public reverse proxy; review approval prompts and <a href="/tools">tool enable/grant settings</a>;
+            back up <code>data/</code> (SQLite) or <code>pg_dump</code> (Postgres).</div>
         </div>
       </div>
     </div></section>

@@ -1,0 +1,72 @@
+/* Settings console — tooltips, provider panels and helper callouts. */
+.chege-tip {
+  font-size: .8rem;
+  color: var(--chege-muted);
+  cursor: help;
+  margin-left: .3rem;
+  vertical-align: middle;
+}
+.chege-tip:hover { color: var(--chege-accent-strong); }
+.chege-tip-inline {
+  color: var(--chege-accent);
+  cursor: help;
+}
+.tooltip .tooltip-inner {
+  max-width: 320px;
+  text-align: left;
+  font-size: .82rem;
+  line-height: 1.45;
+  padding: .6rem .75rem;
+  background: #111827;
+  color: #f8fafc;
+}
+.tooltip.show { opacity: 1; }
+
+.chege-callout {
+  display: flex;
+  gap: .75rem;
+  align-items: flex-start;
+  border: 1px solid var(--chege-border);
+  border-left: .35rem solid var(--chege-info);
+  border-radius: .6rem;
+  padding: .85rem 1rem;
+  background: var(--chege-info-soft);
+  color: var(--chege-ink);
+}
+.chege-callout > i { color: var(--chege-info); margin-top: .15rem; }
+.chege-callout-info code { color: var(--chege-ink); }
+
+.chege-provider-panel {
+  border: 1px solid var(--chege-border);
+  border-radius: .7rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--chege-surface-alt);
+}
+.chege-provider-title {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-bottom: .9rem;
+  font-size: 1rem;
+  font-weight: 800;
+}
+.chege-restart-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  border: 1px solid var(--chege-warning);
+  border-radius: 999px;
+  padding: .15rem .55rem;
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--chege-warning);
+  background: var(--chege-warning-soft);
+}
+.chege-help-warn { color: var(--chege-warning) !important; }
+.chege-help-warn code { color: var(--chege-ink); }
+
+@media (max-width: 991.98px) {
+  .chege-provider-panel { padding: .8rem; }
+}

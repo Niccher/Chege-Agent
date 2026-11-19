@@ -48,6 +48,60 @@ async def test_v1_providers_active_toggle(app):
 
 
 @pytest.mark.asyncio
+async def test_models_catalog_lists_downloads(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/v1/models/catalog")
+        assert resp.status_code == 200
+        models = resp.json()["models"]
+        assert models
+        assert any(m["recommended"] for m in models)
+        assert all(m["url"].startswith("https://huggingface.co/") for m in models)
+
+
+@pytest.mark.asyncio
+async def test_download_rejects_invalid_hf_token(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/models/llamacpp/download",
+            json={"url": "https://huggingface.co/a/b.gguf", "hf_token": "bad token"},
+        )
+        assert resp.status_code == 400
+        assert "hf_token" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_ollama_model_selection_switches_active_provider(app, tmp_path, monkeypatch):
+    settings = get_settings()
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(settings, "data_dir", data_dir)
+    original_provider = settings.default_provider
+    original_model = settings.ollama_model
+
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/models/ollama/select",
+                json={"path": "qwen2.5-coder:7b"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["active_provider"] == "ollama"
+        assert settings.default_provider == "ollama"
+        assert settings.ollama_model == "qwen2.5-coder:7b"
+
+        saved = Settings(data_dir=data_dir)
+        saved.load_saved_settings()
+        assert saved.default_provider == "ollama"
+        assert saved.ollama_model == "qwen2.5-coder:7b"
+    finally:
+        settings.default_provider = original_provider
+        settings.ollama_model = original_model
+
+
+@pytest.mark.asyncio
 async def test_no_legacy_api_alias(app):
     """Only /api/v1 is exposed; unversioned /api routes must not resolve."""
     transport = ASGITransport(app=app)

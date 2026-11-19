@@ -17,6 +17,7 @@
     })();
   </script>
   <title>How it works — Chege Agent</title>
+  <link rel="canonical" href="http://127.0.0.1:8001/">
   <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
   <link rel="stylesheet" href="/assets/vendor/all.min.css">
   <link rel="stylesheet" href="/assets/app.css">
@@ -30,9 +31,10 @@
       <p class="text-muted mb-0">From a prompt to verified changes in your workspace.</p>
     </div></section>
     <section class="app-content"><div class="container-fluid">
-      <div class="callout callout-info"><b>The short version:</b> the browser talks to a versioned REST API; the API starts an
-        asynchronous run; the agent loop calls tools inside a sandboxed workspace; results stream back over SSE;
-        you approve risky steps and inspect the diff.</div>
+      <div class="callout callout-info"><b>The short version:</b> deploy with <code>bash scripts/deploy.sh --isolated</code> and open
+        <a href="http://127.0.0.1:8001/">http://127.0.0.1:8001/</a>. The browser talks to a versioned <code>/api/v1/*</code> REST API;
+        the API starts an asynchronous run; the agent loop calls tools inside a sandboxed workspace; server-authored phases and
+        structured activity stream back over SSE; you approve risky steps and inspect the diff.</div>
 
       <div class="row">
         <div class="col-lg-7">
@@ -42,34 +44,49 @@
                 <div class="time-label"><span class="bg-primary">Lifecycle</span></div>
                 <div><i class="fas fa-folder-plus bg-primary"></i><div class="timeline-item">
                   <h3 class="timeline-header">1 · Project</h3><div class="timeline-body">
-                  <code>POST /api/v1/projects</code> creates a slug, a workspace under <code>workdir/</code> and a Git repository with an initial commit.</div></div></div>
+                  Use the <b>New Project</b> modal in the playground. It captures <b>name, goal, stack and notes</b>. A duplicate slug
+                  returns a clear <code>409</code> message, and creation is transactional so a partial failure leaves no orphan
+                  database or filesystem state. <code>POST /api/v1/projects</code> creates the workspace under <code>workdir/</code>
+                  and a Git repository with an initial commit.</div></div></div>
                 <div><i class="fas fa-comment-dots bg-info"></i><div class="timeline-item">
-                  <h3 class="timeline-header">2 · Session</h3><div class="timeline-body">
-                  A project has threads (sessions). Each thread stores messages, todos and the conversation history.</div></div></div>
+                  <h3 class="timeline-header">2 · Thread</h3><div class="timeline-body">
+                  A project has threads (sessions). Use the <b>New Thread</b> modal to give a thread a title, or the <b>Fork</b> modal to
+                  branch from an existing thread with up to N messages. The <b>Context</b> tab shows the inherited project goal, stack,
+                  notes, workspace path and todos (updated via <code>POST /api/v1/sessions/{id}/todos</code>). Threads share the project
+                  workspace, so concurrent runs can collide — avoid two edits in the same project at once.</div></div></div>
                 <div><i class="fas fa-play bg-warning"></i><div class="timeline-item">
                   <h3 class="timeline-header">3 · Run</h3><div class="timeline-body">
                   <code>POST /api/v1/runs</code> returns <b>202 Accepted</b>. Before any work begins, an automatic checkpoint snapshot is taken.</div></div></div>
                 <div><i class="fas fa-bolt bg-success"></i><div class="timeline-item">
                   <h3 class="timeline-header">4 · Stream &amp; approve</h3><div class="timeline-body">
-                  <code>GET /runs/{id}/events</code> streams token deltas, thinking deltas, tool starts/results and approval requests.</div></div></div>
+                  <code>GET /api/v1/runs/{id}/events</code> streams <code>run.phase</code> labels (for example "Preparing workspace",
+                  "Planning step N of M", "Waiting for the model"), token deltas, tool starts/results and approval requests. The
+                  playground shows a phase spinner while running, a separate <b>Reasoning</b> tab for thinking-capable models, and
+                  an <b>Activity</b> tab with ordered, escaped, redacted event summaries; task lists appear in the Context tab.</div></div></div>
                 <div><i class="fas fa-code-branch bg-secondary"></i><div class="timeline-item">
                   <h3 class="timeline-header">5 · Inspect &amp; revert</h3><div class="timeline-body">
-                  Browse files, read the diff, commit, or <code>POST /runs/{id}/revert</code> to return to the pre-run snapshot.</div></div></div>
+                  Browse files in the <b>Files</b> tab's expandable tree, read the diff, commit, or
+                  <code>POST /api/v1/runs/{id}/revert</code> to return to the pre-run snapshot.</div></div></div>
                 <div><i class="far fa-clock bg-gray"></i></div>
               </div>
             </div>
           </div>
         </div>
         <div class="col-lg-5">
-          <div class="card card-outline card-success mb-4"><div class="card-header"><h3 class="card-title">Approval policies</h3></div>
-            <div class="card-body p-0"><table class="table table-sm m-0">
-              <thead><tr><th>Mode</th><th>Behaviour</th></tr></thead>
-              <tbody>
-                <tr><td><code>auto_edit</code></td><td>Ordinary file writes run automatically; destructive writes, shell commands (except exact safe commands), network and process tools ask first.</td></tr>
-                <tr><td><code>ask_all</code></td><td>Every non-read tool pauses for confirmation.</td></tr>
-                <tr><td><code>full_auto</code></td><td>No prompts at all. Only use this in a throwaway workspace.</td></tr>
-              </tbody>
-            </table></div>
+          <div class="card card-outline card-success mb-4"><div class="card-header"><h3 class="card-title">Approvals &amp; tool governance</h3></div>
+            <div class="card-body">
+              <p class="mb-2">Approvals default to <code>auto_edit</code>: safe edits run automatically while destructive writes,
+                shell commands and other risky actions ask first. You can select <code>ask_all</code> (confirm everything) or
+                <code>full_auto</code> (skip risk-based prompts) per run, but tool governance always applies first — disabled
+                tools and <code>prompt_once</code> grants hold even in <code>full_auto</code>. A checkpoint is taken automatically
+                before every run.</p>
+              <p class="mb-2">The <a href="/tools">Tools</a> page lists all 20 tools with a plain-language <code>purpose</code>, a
+                technical <code>description</code> sent to the model, and a risk category (read / write / exec / network). You can
+                disable a tool or set <code>grant_mode</code> to <code>prompt_once</code>, which asks for a user grant once per run
+                before that tool executes; the grant is recorded and enforced.</p>
+              <p class="mb-0 text-muted">Disabled tools are removed from the schemas sent to the model and blocked at execution time,
+                so an injected tool-call cannot bypass the switch. Tool descriptions in the UI come from trusted server-side metadata.</p>
+            </div>
           </div>
           <div class="card card-outline card-warning"><div class="card-header"><h3 class="card-title">Tool families</h3></div>
             <div class="card-body">
@@ -78,6 +95,8 @@
               <p class="mb-1"><i class="fas fa-code-branch text-success"></i> <b>Git:</b> status, diff, log, commit.</p>
               <p class="mb-1"><i class="fas fa-magnifying-glass text-info"></i> <b>Search &amp; web:</b> grep, fetch, search.</p>
               <p class="mb-0"><i class="fas fa-brain text-danger"></i> <b>Memory &amp; planning:</b> project brain, todos, ask-user.</p>
+              <p class="mb-0 text-muted mt-2">On <a href="/tools">/tools</a> you can search by name or description and filter by risk
+                (Read / Write / Exec); the page shows an enabled count and summary. Fewer enabled tools also means fewer schema tokens.</p>
               <a href="/api" class="btn btn-sm btn-outline-primary mt-3">See the API contract</a>
             </div>
           </div>
@@ -89,16 +108,36 @@
           <thead><tr><th>Event</th><th>Meaning</th></tr></thead>
           <tbody>
             <tr><td><code>run.started</code></td><td>The agent loop accepted the run.</td></tr>
+            <tr><td><code>run.phase</code></td><td>Server-authored phase label with <code>phase</code>, <code>label</code>, <code>step</code>
+              and <code>max_steps</code> — shown as the phase indicator.</td></tr>
             <tr><td><code>message.delta</code></td><td>A chunk of the assistant reply.</td></tr>
-            <tr><td><code>thinking.delta</code></td><td>Model reasoning, shown in a muted panel.</td></tr>
-            <tr><td><code>tool.started</code> / <code>tool.completed</code></td><td>A tool was invoked and its (truncated) result returned.</td></tr>
+            <tr><td><code>thinking.delta</code></td><td>Model reasoning, shown in a collapsible accordion in its own chat bubble and in the <b>Reasoning</b> tab (thinking-capable models only). It expands while thinking and collapses when the answer starts.</td></tr>
+            <tr><td><code>tool.started</code> / <code>tool.output</code> / <code>tool.completed</code></td><td>A tool was invoked and its (truncated) result returned.</td></tr>
             <tr><td><code>tool.approval_required</code></td><td>The run is paused; approve or reject in the chat.</td></tr>
+            <tr><td><code>tool.ask_user</code></td><td>The agent asked a question; shown in the Activity feed.</td></tr>
+            <tr><td><code>todo.updated</code></td><td>The task list changed; shown in the Context tab.</td></tr>
             <tr><td><code>run.completed</code>, <code>run.failed</code>, <code>run.cancelled</code></td><td>Terminal state; the stream closes.</td></tr>
           </tbody>
         </table></div>
       </div>
-      <div class="callout callout-warning mt-4"><b>Tip:</b> reconnecting a stream uses <code>?after=&lt;last event id&gt;</code>, so a page refresh does not lose output.
-        Prompt injection is the main adversary in a no-auth local app — read the <a href="/security">safety model</a>.</div>
+
+      <div class="card mt-4"><div class="card-header"><h3 class="card-title">Files tab: tree browsing</h3></div>
+        <div class="card-body">
+          <p class="mb-2"><code>GET /api/v1/files/tree?project_slug=&lt;slug&gt;&amp;max_depth=8&amp;max_nodes=500</code> returns a nested
+            <code>{root, nodes, truncated, node_count}</code> tree. Directories come before files, <code>.git</code> is ignored, and
+            symlinks are shown but never traversed.</p>
+          <p class="mb-0 text-muted">The Files tab renders a Linux <code>tree</code>-style expandable view with icons for folders, files
+            and symlinks; even empty folders are visible. Depth (1–32) and node count (10–5000) are bounded, and <code>truncated</code>
+            signals that a limit was hit. Opening a file keeps path containment and symlink-escape protection. The flat
+            <code>/api/v1/files</code>, <code>/api/v1/files/content</code> and <code>/api/v1/files/diff</code> endpoints still work.</p>
+        </div>
+      </div>
+
+      <div class="callout callout-warning mt-4"><b>Tip:</b> SSE replay honours the <code>Last-Event-ID</code> header (and <code>?after=</code>),
+        subscribes before replaying history and drops already-replayed live events, so a page refresh does not lose or duplicate output.
+        Keep-alive pings arrive every 20s and the browser restores the active run view after a refresh. Raw server logs are not exposed;
+        the Activity feed is built from structured, redacted summaries. Prompt injection is the main adversary in a local app with no
+        login — read the <a href="/security">safety model</a>.</div>
     </div></section>
   </main>
   <div id="chege-footer"></div>

@@ -1,6 +1,6 @@
 from typing import Generator
 from sqlalchemy import event
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 
@@ -56,11 +56,40 @@ def get_db_engine():
     return _engine
 
 
+def _ensure_event_sequence_integrity(engine) -> None:
+    """Renumber duplicate event sequences and add the uniqueness constraint.
+
+    Older databases used a process-local counter, so seq values could repeat
+    after a restart. SSE replay relies on (run_id, seq) being unique.
+    """
+    from sqlalchemy import text
+    from backend.app.db.models import Event
+
+    with Session(engine) as db:
+        runs = db.exec(text("SELECT DISTINCT run_id FROM events")).all()
+        for (run_id,) in runs:
+            rows = db.exec(
+                select(Event).where(Event.run_id == run_id).order_by(Event.created_at.asc(), Event.id.asc())
+            ).all()
+            for index, row in enumerate(rows, start=1):
+                if row.seq != index:
+                    row.seq = index
+                    db.add(row)
+        db.commit()
+
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_events_run_seq ON events (run_id, seq)"))
+        except Exception as exc:  # pragma: no cover - depends on DB backend
+            logger.warning(f"Could not create event sequence index: {exc}")
+
+
 def init_db() -> None:
     """Initialize database tables."""
     engine = get_db_engine()
     logger.info("Initializing database tables...")
     SQLModel.metadata.create_all(engine)
+    _ensure_event_sequence_integrity(engine)
     logger.info("Database initialized successfully.")
 
 

@@ -287,7 +287,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": f"{name} already exists. Delete it first to re-download."}, 409)
             return
 
+        token = str(payload.get("hf_token") or "").strip()
+        if token and not re.fullmatch(r"[A-Za-z0-9_.-]{8,256}", token):
+            self._json({"error": "invalid Hugging Face token"}, 400)
+            return
+
         partial = target.with_suffix(target.suffix + ".part")
+        token_config = None
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
@@ -295,9 +301,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         try:
+            cmd = ["curl", "-fSL", "--retry", "2", "--max-time", str(DOWNLOAD_TIMEOUT),
+                   "-o", str(partial), url]
+            if token:
+                # Put the token in a 0600 curl config instead of argv so it does
+                # not appear in the process list.
+                token_config = MODEL_DIR / f".hf-download-{os.getpid()}-{time.time_ns()}.curlrc"
+                token_config.write_text(f'header = "Authorization: Bearer {token}"\n', encoding="utf-8")
+                os.chmod(token_config, 0o600)
+                cmd = [
+                    "curl", "-fSL", "--retry", "2", "--max-time", str(DOWNLOAD_TIMEOUT),
+                    "--config", str(token_config), "-o", str(partial), url,
+                ]
             proc = subprocess.Popen(
-                ["curl", "-fSL", "--retry", "2", "--max-time", str(DOWNLOAD_TIMEOUT),
-                 "-o", str(partial), url],
+                cmd,
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
             )
             started = time.monotonic()
@@ -330,6 +347,12 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             partial.unlink(missing_ok=True)
             self._sse({"status": "error", "message": str(exc)})
+        finally:
+            if token_config is not None:
+                try:
+                    token_config.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def _select(self, payload: dict) -> None:
         raw = str(payload.get("path", "")).strip()

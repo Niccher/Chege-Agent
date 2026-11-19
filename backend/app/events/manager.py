@@ -1,6 +1,8 @@
 import asyncio
 import json
-from typing import AsyncIterator, Dict, List
+from typing import Dict, List
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 from backend.app.db.models import Event
 
@@ -13,7 +15,6 @@ class EventManager:
 
     def __init__(self):
         self._subscribers: Dict[str, List[asyncio.Queue]] = {}
-        self._seq_counters: Dict[str, int] = {}
 
     def subscribe(self, run_id: str) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue()
@@ -29,20 +30,35 @@ class EventManager:
                 del self._subscribers[run_id]
 
     async def emit(self, db: Session, run_id: str, event_type: str, payload: dict) -> Event:
-        # Monotonic sequence per run
-        self._seq_counters[run_id] = self._seq_counters.get(run_id, 0) + 1
-        seq = self._seq_counters[run_id]
+        """Persist an event with a DB-derived, gap-free per-run sequence.
 
+        The sequence is computed inside the transaction with SELECT MAX(seq)+1
+        and protected by a unique index. On a concurrent-insert collision we
+        roll back and recompute, so a process restart can never desync SSE
+        sequence numbers (unlike the old in-memory counter).
+        """
         payload_str = json.dumps(payload)
-        evt = Event(
-            run_id=run_id,
-            seq=seq,
-            event_type=event_type,
-            payload_json=payload_str,
-        )
-        db.add(evt)
-        db.commit()
-        db.refresh(evt)
+        evt: Event | None = None
+        for attempt in range(5):
+            try:
+                seq = db.exec(
+                    select(func.coalesce(func.max(Event.seq), 0)).where(Event.run_id == run_id)
+                ).one() + 1
+                evt = Event(
+                    run_id=run_id,
+                    seq=seq,
+                    event_type=event_type,
+                    payload_json=payload_str,
+                )
+                db.add(evt)
+                db.commit()
+                db.refresh(evt)
+                break
+            except IntegrityError:
+                db.rollback()
+                if attempt == 4:
+                    raise
+        assert evt is not None
 
         # Notify active subscriber queues
         if run_id in self._subscribers:

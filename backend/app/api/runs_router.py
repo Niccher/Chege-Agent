@@ -6,8 +6,6 @@ from backend.app.agent.run_manager import RunManager
 from backend.app.core.config import Settings, get_settings
 from backend.app.db.database import get_db_session
 from backend.app.db.models import Run, Session as DBSession, ToolCall
-from backend.app.providers.ollama import OllamaProvider
-from backend.app.providers.openai_compat import OpenAICompatProvider
 from backend.app.sandbox.docker import DockerSandbox
 from backend.app.sandbox.local import LocalSandbox
 
@@ -20,20 +18,26 @@ _run_manager = None
 
 def get_run_manager(settings: Settings = Depends(get_settings)) -> RunManager:
     global _run_manager
+    provider = get_provider(settings=settings)
+
+    def sandbox_factory(workspace_root, slug):
+        if settings.sandbox_backend == "docker":
+            return DockerSandbox(
+                workspace_root,
+                slug,
+                image=settings.default_sandbox_image,
+                docker_host=settings.docker_socket_proxy,
+            )
+        return LocalSandbox(workspace_root)
+
     if _run_manager is None:
-        provider = get_provider(settings=settings)
-
-        def sandbox_factory(workspace_root, slug):
-            if settings.sandbox_backend == "docker":
-                return DockerSandbox(
-                    workspace_root,
-                    slug,
-                    image=settings.default_sandbox_image,
-                    docker_host=settings.docker_socket_proxy,
-                )
-            return LocalSandbox(workspace_root)
-
         _run_manager = RunManager(provider=provider, sandbox_factory=sandbox_factory)
+    else:
+        # Model/provider selection can change while the process is running.
+        # New runs must use the current default instead of the provider cached
+        # when this singleton was first created.
+        _run_manager.provider = provider
+        _run_manager.sandbox_factory = sandbox_factory
     return _run_manager
 
 
@@ -58,7 +62,7 @@ class StartRunRequest(BaseModel):
     model: str = Field(default=DEFAULT_MODEL)
     provider: str | None = Field(default=None, description="Optional provider override ('llama_cpp' or 'ollama')")
     policy_mode: str = Field(default="auto_edit", description="ask_all | auto_edit | full_auto")
-    max_steps: int = Field(default=50)
+    max_steps: int | None = Field(default=None, description="Override the configured max steps for this run")
 
 
 class ApprovalActionItem(BaseModel):
@@ -84,6 +88,12 @@ async def start_run(
     if not session_rec:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    if request.policy_mode not in {"ask_all", "auto_edit", "full_auto"}:
+        raise HTTPException(status_code=400, detail="policy_mode must be ask_all, auto_edit or full_auto")
+    max_steps = request.max_steps if request.max_steps is not None else settings.max_steps
+    if max_steps < 1 or max_steps > 200:
+        raise HTTPException(status_code=400, detail="max_steps must be between 1 and 200")
+
     model_name = resolve_model(request.model, request.provider, settings)
     run_id = str(uuid.uuid4())
     run = Run(
@@ -91,6 +101,7 @@ async def start_run(
         session_id=request.session_id,
         status="running",
         model=model_name,
+        provider=(request.provider or settings.default_provider),
     )
     db.add(run)
     db.commit()
@@ -101,7 +112,7 @@ async def start_run(
             session_id=request.session_id,
             user_prompt=request.prompt,
             model_name=model_name,
-            max_steps=request.max_steps,
+            max_steps=max_steps,
             policy_mode=request.policy_mode,
             provider_name=request.provider,
         )
@@ -170,7 +181,7 @@ def revert_run_checkpoint(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
 
-    work_dir = settings.workdir / project.slug
+    work_dir = settings.project_root(project.slug)
     reverted = CheckpointManager.revert_run(work_dir, cp.git_ref)
     if not reverted:
         raise HTTPException(status_code=500, detail="Failed to revert workspace.")

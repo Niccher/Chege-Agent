@@ -197,7 +197,7 @@ class DockerSandbox(BaseSandbox):
             yield buffer.rstrip("\r")
 
     async def start_process(self, command: str, name: str, cwd: str = ".") -> str:
-        container = await self._ensure_container()
+        await self._ensure_container()
         process_id = f"sbx-{name[:24]}-{len(self._processes) + 1}"
         log_path = f"/tmp/chege-{process_id}.log"
         shell = f"nohup bash -lc {shlex.quote(command)} > {log_path} 2>&1 & echo $!"

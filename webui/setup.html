@@ -17,6 +17,7 @@
     })();
   </script>
   <title>Setup &amp; config — Chege Agent</title>
+  <link rel="canonical" href="http://127.0.0.1:8001/">
   <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
   <link rel="stylesheet" href="/assets/vendor/all.min.css">
   <link rel="stylesheet" href="/assets/app.css">
@@ -31,23 +32,21 @@
     </div></section>
     <section class="app-content"><div class="container-fluid">
       <div class="callout callout-info mb-4">
-        Looking to change defaults? Use the <a href="/settings"><b>Settings console</b></a> for providers, sandbox,
-        agent limits and theme. This page is the deployment guide and <code>.env</code> reference.
+        Looking to change defaults? Use the <a href="/settings"><b>Settings console</b></a> for providers, context budget,
+        agent limits and theme (every control has a plain-language tooltip). Tool enable/disable and grants live at
+        <a href="/tools"><b>/tools</b></a>. This page is the deployment guide and <code>.env</code> reference.
       </div>
       <div class="card card-outline card-primary"><div class="card-header"><h3 class="card-title">Deploy</h3></div>
         <div class="card-body">
           <pre class="doc-code"><code>git clone &lt;your-repo-url&gt; &amp;&amp; cd "Chege Agent"
-bash scripts/deploy.sh                 # DEFAULT: Docker + llama.cpp precompiled + SQLite
-bash scripts/deploy.sh --with-postgres # internal Postgres container
-bash scripts/deploy.sh --with-ollama   # switch provider to host Ollama on :11434
-bash scripts/deploy.sh --isolated      # separate stack; never touches existing containers
-bash scripts/deploy.sh doctor          # preflight diagnostics
-bash scripts/deploy.sh logs chege-agent</code></pre>
-          <p class="text-muted mt-2 mb-0">The script syncs <code>.env</code>, validates compose, builds, waits for health,
-            and prints loopback URLs plus SSH-tunnel instructions. It never publishes the API to <code>0.0.0.0</code>.</p>
+bash scripts/deploy.sh --isolated</code></pre>
+          <p class="text-muted mt-2 mb-2">This recreates only <code>chege-local-agent</code>; it never touches unrelated containers.
+            The script syncs <code>.env</code>, validates compose, builds, waits for health, and prints loopback URLs plus SSH-tunnel
+            instructions. Open the canonical local URL <a href="http://127.0.0.1:8001/">http://127.0.0.1:8001/</a>. The API is bound
+            to <code>127.0.0.1</code> and is not published on <code>0.0.0.0</code>.</p>
           <p class="text-muted mb-0">Other Docker stacks already running? Set <code>CHEGE_PORT</code> to a free port in
-            <code>.env</code> and use <code>--isolated</code>: unique container names and a private network, with no
-            orphan removal of existing apps.</p>
+            <code>.env</code> and keep using <code>bash scripts/deploy.sh --isolated</code>: unique container names and a private
+            network, with no orphan removal of existing apps.</p>
         </div>
       </div>
 
@@ -58,13 +57,13 @@ bash scripts/deploy.sh logs chege-agent</code></pre>
               <thead><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr></thead>
               <tbody>
                 <tr><td><code>CHEGE_HOST</code></td><td><code>127.0.0.1</code></td><td>Loopback binding. Keep it.</td></tr>
-                <tr><td><code>CHEGE_PORT</code></td><td><code>8000</code></td><td>Host port.</td></tr>
-                <tr><td><code>CHEGE_SANDBOX_BACKEND</code></td><td><code>docker</code></td><td><code>docker</code> or <code>local</code> (explicit opt-in).</td></tr>
-                <tr><td><code>CHEGE_DATABASE_URL</code></td><td>empty</td><td>Empty = SQLite; set by the Postgres overlay.</td></tr>
-                <tr><td><code>POSTGRES_PASSWORD</code></td><td>generated</td><td>Internal DB password, stored only in <code>.env</code>.</td></tr>
-                <tr><td><code>CHEGE_DEFAULT_PROVIDER</code></td><td><code>llama_cpp</code></td><td><code>llama_cpp</code>, <code>ollama</code> or <code>openai</code>.</td></tr>
-                <tr><td><code>CHEGE_LLAMACPP_URL</code></td><td><code>:8080/v1</code></td><td>Host llama.cpp endpoint.</td></tr>
-                <tr><td><code>CHEGE_OLLAMA_URL</code></td><td><code>:11434</code></td><td>Host Ollama endpoint.</td></tr>
+                <tr><td><code>CHEGE_PORT</code></td><td><code>8001</code></td><td>Host port; canonical URL <code>http://127.0.0.1:8001/</code>.</td></tr>
+                <tr><td><code>CHEGE_SANDBOX_BACKEND</code></td><td><code>docker</code></td><td>Read-only in Settings; <code>docker</code> is the shipped sandbox backend.</td></tr>
+                <tr><td><code>CHEGE_DEFAULT_PROVIDER</code></td><td><code>llama_cpp</code></td><td><code>llama_cpp</code> (llama.cpp), <code>ollama</code> (Ollama) or <code>openai</code> (OpenAI-compatible).</td></tr>
+                <tr><td><code>CHEGE_DEFAULT_CONTEXT_WINDOW</code></td><td><code>8192</code></td><td>Agent-side prompt budget passed to the context builder (tool-schema tokens and a completion reserve are subtracted).</td></tr>
+                <tr><td><code>CHEGE_LLAMACPP_CTX</code></td><td><code>8192</code></td><td>llama-server context (<code>n_ctx</code>). Separate from the agent-side budget; changing it requires a restart.</td></tr>
+                <tr><td><code>CHEGE_LLAMACPP_URL</code></td><td><code>http://host.docker.internal:8080/v1</code></td><td>Host llama.cpp endpoint.</td></tr>
+                <tr><td><code>CHEGE_OLLAMA_URL</code></td><td><code>http://host.docker.internal:11434</code></td><td>Host Ollama endpoint.</td></tr>
               </tbody>
             </table></div>
           </div>
@@ -72,34 +71,89 @@ bash scripts/deploy.sh logs chege-agent</code></pre>
         <div class="col-lg-6">
           <div class="card card-outline card-success h-100"><div class="card-header"><h3 class="card-title">Providers</h3></div>
             <div class="card-body">
-              <p><b>llama.cpp (default):</b> run a local server on port 8080 and point <code>CHEGE_LLAMACPP_URL</code> at
-                <code>http://host.docker.internal:8080/v1</code>.</p>
-              <p><b>Ollama:</b> <code>ollama serve</code> on the host; URL <code>http://host.docker.internal:11434</code>.</p>
-              <p><b>OpenAI-compatible:</b> set <code>CHEGE_OPENAI_BASE_URL</code> and <code>CHEGE_OPENAI_API_KEY</code>.</p>
-              <p class="mb-0 text-muted">Switch providers live from the playground or with
-                <code>PUT /api/v1/providers/active</code>.</p>
+              <p class="mb-2">The Settings panels switch between <code>llama_cpp</code> (llama.cpp), <code>ollama</code> (Ollama) and
+                <code>openai</code> (OpenAI-compatible) based on <code>default_provider</code>. Only the selected runner's settings are
+                used; the playground can still override the provider per run.</p>
+              <p class="mb-1"><b>llama.cpp (<code>llama_cpp</code>, default):</b> <code>llamacpp_url</code>
+                (<code>http://host.docker.internal:8080/v1</code>), <code>llamacpp_model</code> and <code>llamacpp_ctx</code> (8192).</p>
+              <p class="mb-1"><b>Ollama (<code>ollama</code>):</b> <code>ollama_url</code>
+                (<code>http://host.docker.internal:11434</code>), <code>ollama_model</code>, <code>ollama_num_ctx</code> (8192) and
+                <code>ollama_keep_alive</code>.</p>
+              <p class="mb-2"><b>OpenAI-compatible (<code>openai</code>):</b> <code>openai_base_url</code>
+                (<code>https://api.openai.com/v1</code>), <code>openai_api_key</code> (masked, never echoed back) and
+                <code>openai_max_tokens</code>.</p>
+              <p class="mb-0 text-muted">llama-server knobs — <code>llamacpp_ctx</code>, <code>llamacpp_model</code>, host/port and
+                <code>n_gpu_layers</code> — take effect on the host only after <code>bash scripts/llamacpp.sh restart</code>. The
+                Settings UI marks which controls need a restart; other settings apply to the next run or immediately.</p>
             </div>
           </div>
-          <div class="card card-outline card-warning mt-4"><div class="card-header"><h3 class="card-title">Database choices</h3></div>
+          <div class="card card-outline card-warning mt-4"><div class="card-header"><h3 class="card-title">Settings persistence</h3></div>
             <div class="card-body">
-              <p class="mb-2"><b>SQLite (default)</b> is an embedded file at <code>data/chege.db</code> — zero ops, ideal for one person.
-                Back it up by stopping the stack and copying the <code>data/</code> directory.</p>
-              <p class="mb-0"><b>Postgres</b> runs as an internal container with a named volume and a healthcheck; port 5432 is
-                never published. Back it up with <code>docker compose exec postgres pg_dump -U chege chege &gt; backup.sql</code>
-                (add both compose files when using the overlay).</p>
+              <p class="mb-1"><code>PATCH /api/v1/settings</code> — applies changes to the running process only; cleared on restart.</p>
+              <p class="mb-1"><code>PUT /api/v1/settings/defaults</code> — the Settings UI's <b>Save as defaults</b>; applies changes and
+                persists them to <code>data/settings.json</code> (atomic write, mode <code>0600</code>).</p>
+              <p class="mb-1"><code>DELETE /api/v1/settings/defaults</code> — clears saved defaults; runtime values remain until restart.</p>
+              <p class="mb-0 text-muted"><code>GET /api/v1/settings</code> returns the masked current settings. Appearance/theme is
+                stored only in the browser (<code>localStorage</code> key <code>lte-theme</code>) and is never sent to the server.</p>
             </div>
           </div>
         </div>
       </div>
 
+      <div class="card mt-4"><div class="card-header"><h3 class="card-title">Settings fields (with tooltips)</h3></div>
+        <div class="card-body">
+          <p class="mb-2">Every control in <a href="/settings">/settings</a> has a plain-language tooltip — hover to read it (25 tooltips
+            in total). The fields you can edit are:</p>
+          <div class="row">
+            <div class="col-md-6">
+              <ul class="mb-2">
+                <li><code>default_provider</code> — <code>llama_cpp</code> / <code>ollama</code> / <code>openai</code></li>
+                <li><code>default_temperature</code> (0.2)</li>
+                <li><code>default_top_p</code> (0.9)</li>
+                <li><code>default_context_window</code> (8192)</li>
+                <li><code>max_steps</code> (50)</li>
+                <li><code>run_timeout_seconds</code> (600)</li>
+                <li><code>provider_timeout_seconds</code> (120)</li>
+                <li><code>sandbox_backend</code> — read-only, <code>docker</code></li>
+              </ul>
+            </div>
+            <div class="col-md-6">
+              <ul class="mb-0">
+                <li><code>llamacpp_url</code> / <code>llamacpp_model</code> / <code>llamacpp_ctx</code> (8192)</li>
+                <li><code>ollama_url</code> / <code>ollama_num_ctx</code> (8192) / <code>ollama_keep_alive</code> / <code>ollama_model</code></li>
+                <li><code>openai_base_url</code> / <code>openai_api_key</code> (masked) / <code>openai_max_tokens</code></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-4"><div class="card-header"><h3 class="card-title">Context budget &amp; llama-server restart</h3></div>
+        <div class="card-body">
+          <pre class="doc-code"><code>CHEGE_LLAMACPP_CTX=8192
+CHEGE_DEFAULT_CONTEXT_WINDOW=8192</code></pre>
+          <p class="mt-2 mb-2">Keep the two context knobs distinct: <code>CHEGE_DEFAULT_CONTEXT_WINDOW</code> /
+            <code>default_context_window</code> (8192) is the <b>agent-side prompt budget</b>, while
+            <code>CHEGE_LLAMACPP_CTX</code> / <code>llamacpp_ctx</code> (8192) is the <b>llama-server context</b>
+            (<code>n_ctx</code>). The builder subtracts tool-schema tokens and a completion reserve before adding history, so
+            prompts stay within the server's context.</p>
+          <p class="mb-2">The shipped llama-server was restarted with <code>bash scripts/llamacpp.sh restart</code> and now listens
+            with <code>ctx=8192, ngl=0</code>. Re-run that command after changing <code>llamacpp_ctx</code>,
+            <code>llamacpp_model</code>, host/port or <code>n_gpu_layers</code> — a container restart alone does not apply them.</p>
+          <p class="mb-0 text-muted">If a long thread still exceeds the budget, start a new thread or fork from a safe message to
+            shorten the history.</p>
+        </div>
+      </div>
+
       <div class="card mt-4"><div class="card-header"><h3 class="card-title">Remote access &amp; native development</h3></div>
         <div class="card-body">
-          <p>There is <b>no in-app authentication</b>. To use the agent from another machine, keep the loopback binding and open an SSH tunnel:</p>
-          <pre class="doc-code"><code>ssh -N -L 8000:127.0.0.1:8000 user@your-instance
-# then browse http://127.0.0.1:8000/ on your laptop</code></pre>
-          <p class="mb-0">For native development without Docker, use <code>CHEGE_SANDBOX_BACKEND=local</code> and
-            <code>uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload</code>. The API docs live at
-            <a href="/docs">/docs</a> and the OpenAPI JSON at <code>/api/v1/openapi.json</code>.</p>
+          <p>There is <b>no in-app login</b> by design. To use the agent from another machine, keep the loopback binding and open an SSH tunnel:</p>
+          <pre class="doc-code"><code>ssh -N -L 8001:127.0.0.1:8001 user@your-instance
+# then browse http://127.0.0.1:8001/ on your laptop</code></pre>
+          <p class="mb-0">For native development, run the API on the loopback interface with
+            <code>uvicorn backend.app.main:app --host 127.0.0.1 --port 8001 --reload</code>. Health checks are
+            <code>/healthz</code> and <code>/readyz</code>; the API docs live at <a href="/docs">/docs</a> and the OpenAPI JSON at
+            <code>/api/v1/openapi.json</code>.</p>
         </div>
       </div>
     </div></section>

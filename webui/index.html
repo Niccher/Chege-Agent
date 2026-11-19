@@ -18,6 +18,7 @@
     })();
   </script>
   <title>Chege Agent — Your personal coding agent</title>
+  <link rel="canonical" href="http://127.0.0.1:8001/">
   <link rel="stylesheet" href="/assets/vendor/adminlte.min.css">
   <link rel="stylesheet" href="/assets/vendor/all.min.css">
   <link rel="stylesheet" href="/assets/app.css">
@@ -38,6 +39,7 @@
           <li class="nav-item"><a class="nav-link" href="/api">API</a></li>
           <li class="nav-item"><a class="nav-link" href="/security">Safety</a></li>
           <li class="nav-item"><a class="nav-link" href="/settings">Settings</a></li>
+          <li class="nav-item"><a class="nav-link" href="/tools">Tools</a></li>
           <li class="nav-item"><a class="nav-link" href="/models">Models</a></li>
           <li class="nav-item"><a class="nav-link" href="/status">Status</a></li>
           <li class="nav-item ml-2">
@@ -84,6 +86,29 @@
       </div>
 
       <div class="row mt-4">
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-wrench"></i></div>
+            <h5>Tools &amp; grants</h5><p class="text-muted mb-0">Manage all 20 tools at <a href="/tools">/tools</a>: switch them on or off and require a
+              one-time grant per run with <code>prompt_once</code>.</p></div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-folder-open"></i></div>
+            <h5>Tree file browsing</h5><p class="text-muted mb-0">Explore a project as an expandable tree in the Files tab — directories,
+              files and symlinks, with path containment preserved.</p></div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-circle-notch"></i></div>
+            <h5>Visible run phases</h5><p class="text-muted mb-0">Watch server-authored phase labels during a run and read the ordered,
+              redacted Activity feed afterwards.</p></div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="chege-feature"><div class="icon"><i class="fas fa-sliders-h"></i></div>
+            <h5>Guided settings</h5><p class="text-muted mb-0">Every control in <a href="/settings">Settings</a> has a plain-language
+              tooltip; save as defaults or apply changes to the running process.</p></div>
+        </div>
+      </div>
+
+      <div class="row mt-4">
         <div class="col-lg-7">
           <h3 class="mb-3">How a run works</h3>
           <div class="timeline">
@@ -91,9 +116,11 @@
             <div><i class="fas fa-folder-plus bg-primary"></i><div class="timeline-item"><h3 class="timeline-header">Create a project</h3>
               <div class="timeline-body">A slug, a workspace and a Git repo are created for you.</div></div></div>
             <div><i class="fas fa-comments bg-info"></i><div class="timeline-item"><h3 class="timeline-header">Start a thread and send a prompt</h3>
-              <div class="timeline-body">Choose a provider (llama.cpp, Ollama or OpenAI-compatible) and a policy mode.</div></div></div>
+              <div class="timeline-body">Choose a provider — llama.cpp (<code>llama_cpp</code>), Ollama (<code>ollama</code>) or
+                OpenAI-compatible (<code>openai</code>). Approvals default to <code>auto_edit</code> (<code>ask_all</code> and <code>full_auto</code> are selectable per run).</div></div></div>
             <div><i class="fas fa-bolt bg-warning"></i><div class="timeline-item"><h3 class="timeline-header">Stream and approve</h3>
-              <div class="timeline-body">Tokens and tool calls appear live. Risky commands pause for your decision.</div></div></div>
+              <div class="timeline-body">Phase labels, tokens and tool calls appear live in the Activity tab. Risky commands pause for
+                your decision, and tools with <code>prompt_once</code> ask for a grant once per run.</div></div></div>
             <div><i class="fas fa-code-diff bg-success"></i><div class="timeline-item"><h3 class="timeline-header">Inspect, commit or revert</h3>
               <div class="timeline-body">Read the diff, commit changes, or roll the workspace back to the pre-run checkpoint.</div></div></div>
             <div><i class="far fa-clock bg-gray"></i></div>
@@ -103,18 +130,22 @@
           <h3 class="mb-3">60-second quickstart</h3>
           <pre class="doc-code"><code>git clone &lt;your-repo-url&gt;
 cd "Chege Agent"
-bash scripts/deploy.sh
+bash scripts/deploy.sh --isolated
 
 # open the landing page
-http://<span class="chege-host">127.0.0.1</span>/</code></pre>
-          <p class="text-muted small mt-2">Want Postgres instead of SQLite?
-            <code>bash scripts/deploy.sh --with-postgres</code> starts an internal database with no published port.</p>
+http://<span class="chege-host">127.0.0.1</span>:8001/</code></pre>
+          <p class="text-muted small mt-2">The isolated deploy recreates only <code>chege-local-agent</code> and leaves other
+            containers untouched. Full details are in the <a href="/setup">setup guide</a>.</p>
           <a href="/setup" class="btn btn-outline-primary btn-sm"><i class="fas fa-list-check"></i> Full setup guide</a>
+          <a href="/tools" class="btn btn-outline-primary btn-sm ml-1"><i class="fas fa-wrench"></i> Manage tools</a>
+          <a href="/settings" class="btn btn-outline-primary btn-sm ml-1"><i class="fas fa-sliders-h"></i> Settings</a>
           <hr>
           <h5><i class="fas fa-lock"></i> Local by design</h5>
-          <p class="text-muted small">There is deliberately no login, no users and no tenants. The port is bound to
+          <p class="text-muted small">This is a single-user, local-only app with no login by design. The port is bound to
             <code>127.0.0.1</code>; for remote use, connect over an SSH tunnel. Read the
-            <a href="/security">safety model</a> before enabling <code>full_auto</code>.</p>
+            <a href="/security">safety model</a> for how disabled tools and one-time grants are enforced at execution time.
+            The Activity tab shows redacted server-authored phases, the Files tab browses a project tree, and Settings tooltips
+            explain every control.</p>
         </div>
       </div>
 
@@ -145,7 +176,7 @@ http://<span class="chege-host">127.0.0.1</span>/</code></pre>
       <span><strong>Chege Agent</strong> · personal, local-only · no login, no telemetry</span>
       <span class="chege-footer-links">
         <a href="/guide">Guide</a> · <a href="/setup">Setup</a> · <a href="/settings">Settings</a> ·
-        <a href="/models">Models</a> · <a href="/api">API</a> · <a href="/security">Safety</a> ·
+        <a href="/tools">Tools &amp; grants</a> · <a href="/models">Models</a> · <a href="/api">API</a> · <a href="/security">Safety</a> ·
         <a href="/status">Status</a> · <a href="/docs" target="_blank" rel="noopener">Swagger</a> ·
         <a href="/healthz">Health</a>
       </span>

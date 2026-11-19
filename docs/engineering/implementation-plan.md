@@ -2,9 +2,9 @@
 
 ## 0. Scope and assumptions
 
-**Goal:** go from "the v2 backend mostly works but the shipped UI and security story do not" to a personal agent that you can open at `http://127.0.0.1:8000`, use to create projects, chat with a local model, inspect streamed tool calls, approve commands, and inspect/revert changes — safely and repeatably.
+**Goal:** go from "the v2 backend mostly works but the shipped UI and security story do not" to a personal agent that you can open at `http://127.0.0.1:8001/`, use to create projects, chat with a local model, inspect streamed tool calls, approve commands, and inspect/revert changes — safely and repeatably.
 
-**Product decision (applied in this change):** Chege Agent is a **single-user, local-only** application. There is no login, no bearer token, no users, and no tenants. The API is open to any process that can reach the port, so `CHEGE_HOST=127.0.0.1` and the Compose `127.0.0.1:8000:8000` binding are part of the security boundary. Do not expose the service directly to an untrusted network; use a firewall or SSH tunnel for remote access.
+**Product decision (applied in this change):** Chege Agent is a **single-user, local-only** application. There is no login, no bearer token, no users, and no tenants. The API is open to any process that can reach the port, so `CHEGE_HOST=127.0.0.1` and the isolated Compose `127.0.0.1:8001` binding are part of the security boundary. Do not expose the service directly to an untrusted network; use a firewall or SSH tunnel for remote access.
 
 **Non-goals:** multi-tenancy, remote/cloud deployment, account management, billing, role-based access, and a redesign of the LLM provider abstraction.
 
@@ -16,7 +16,8 @@
 - **Checkpoints:** created automatically at run start; revert preserves dirty work in a safety stash.
 - **Database:** SQLite remains the default; Postgres is opt-in via `bash scripts/deploy.sh --with-postgres` as an internal container with no published host port.
 - **Sandbox:** implemented the real Docker SDK path through `tcp://docker-socket-proxy:2375` with `sandbox/Dockerfile`. There is no silent local fallback; `--local-sandbox` is explicit no-isolation mode.
-- **Deployment:** `scripts/deploy.sh` follows the staged pattern of DocTune's script without auth, port 80, `chmod 777`, auto-stash/git pull or ML build bloat.
+- **Deployment:** `scripts/deploy.sh` follows the staged pattern of DocTune's script without auth, port 80, `chmod 777`, auto-stash/git pull or ML build bloat. The isolated path (`--isolated`) binds only `127.0.0.1:8001` and never touches unrelated containers.
+- **Follow-up scope (shipped):** Phase 4C (section 3) recorded the audited work for settings tooltips/provider config, tool governance, tree file browsing, and run visibility. All of it is now **shipped and verified** (see 4C.8). Section 8 is the doc/landing-page update matrix that has been applied to match the shipped behavior.
 
 ---
 
@@ -32,11 +33,11 @@
 | Provider normalization and streaming (llama.cpp default, Ollama, OpenAI-compatible) | Working | `backend/app/providers/*` |
 | Tool registry with ~20 tools (file, exec, git, search, web, memory, interactive) | Working | `backend/app/tools/registry.py:56-80` |
 | Path containment helper rejects traversal, symlinks, absolute paths, NUL bytes | Working | `backend/app/security/paths.py:27-53` |
-| Event persistence, monotonic sequence (in-process), SSE endpoint with `?after=` replay | Partially working | `backend/app/events/manager.py:31-62`, `events_router.py:12-63` |
+| Event persistence, DB-derived per-run sequence, SSE with `Last-Event-ID` + `?after=` replay | Working (hardened in Phase 4C) | `backend/app/events/manager.py`, `events_router.py:12-66` |
 | Basic risk-based approval decisions (`read`/`write`/`exec`/`network`) | Working but unsafe defaults | `backend/app/agent/approval_engine.py:32-58` |
 | Loop guard detection for repeated tool calls | Working | `backend/app/agent/loop_guard.py` |
 | Compose stack, Dockerfile, healthcheck, loopback binding | Working | `docker-compose.yml`, `Dockerfile` |
-| Test suite: 37 passing unit/integration tests | Working | `./py-env/bin/python -m pytest -q` |
+| Test suite: 40 passing unit/integration tests | Working | `./py-env/bin/python -m pytest -q` → 40 passed, 2 warnings |
 | **No authentication (this change)** | Working | auth router/module removed; all routers unauthenticated |
 
 ### 1.2 What does not work today
@@ -75,6 +76,11 @@
 | Checkpoint and revert | ❌ | create snapshots, safe restore | 3 |
 | Metrics in UI | ❌ | populate DB fields | 3 |
 | Docs match code | ❌ | docs sweep | 4 |
+| Tooltips / per-runner model config on `/settings` | ✅ | shipped (tooltips, wired settings, provider sections) | 4C |
+| Per-tool enable/disable + grant prompts + Tools page | ✅ | shipped (`tool_settings`/`tool_grants`, API, execution guards, nav/UI) | 4C |
+| Tree-style file/folder browser in `/app` | ✅ | shipped (nested tree endpoint + UI) | 4C |
+| Run phase indicator + live activity visibility | ✅ | shipped (`run.phase`, Activity tab, SSE replay hardening) | 4C |
+| Project creation UX + context budget safety | ✅ | shipped (create modal, unified context, llama.cpp 8192 restart) | 4C |
 
 ---
 
@@ -220,8 +226,8 @@ Removing auth raises the importance of the local sandbox boundary: a prompt inje
 
 | # | Task | Acceptance criteria |
 |---|---|---|
-| 4.1 | Replace stale port references with 8000 | Done — `grep -R 9100 docs/` only finds this historical task row |
-| 4.2 | Use `${CHEGE_PORT:-8000}` in Compose and Docker CMD/healthcheck; either wire `CHEGE_DEFAULT_CONTEXT_WINDOW`, `CHEGE_MAX_STEPS`, `CHEGE_RUN_TIMEOUT_SECONDS` or remove them from docs | `.env` changes take effect |
+| 4.1 | Replace stale port references (historically 8000; now canonical **8001** for the isolated deploy) | Done — later superseded by Phase 4C, which standardized on `http://127.0.0.1:8001/` |
+| 4.2 | Use `${CHEGE_PORT:-8000}` internally in Compose/CMD; wire `CHEGE_DEFAULT_CONTEXT_WINDOW`, `CHEGE_MAX_STEPS`, `CHEGE_RUN_TIMEOUT_SECONDS` into runtime | Done — context/memory/timeouts wired in Phase 4C (see 4C.8) |
 | 4.3 | Update SSE event names, approval semantics, request bodies, checkpoint claims, and provider defaults in docs to match code | Contract review passes |
 | 4.4 | Fix packaging (`packages=["backend"]`), reconcile `pyproject.toml` vs `requirements.txt`, drop obsolete Compose `version`, fix ownership of legacy `workdir/`/`logs/` dirs | Fresh `pip install .` and fresh `docker compose up --build` both work |
 | 4.5 | Keep `webui/` as the single UI; remove the stale `fast-api/` adapter and its Dockerfile COPY once the new UI is proven | Done — no dead entrypoints shipped |
@@ -244,18 +250,234 @@ The API **is** versioned (`/api/v1/*`) but it is not consistently RESTful, and t
 
 ---
 
+### Phase 4C — Settings, tools, file UX, run visibility, and docs alignment (SHIPPED & VERIFIED)
+
+This phase captured the post-deploy audit for the live playground and the requested UX/configuration work. **All Phase 4C work is now shipped and verified**: the P0/P1/P2 batches plus the settings/model-config (P1b), Tools governance (P1c), and tree file view (P1d) slices. The tables and "(planned)" headings in 4C.0–4C.7 are retained verbatim as the historical audit/implementation record — every item they describe has been implemented. Verification evidence is in **4C.8**, and the doc/landing-page matrix in section 8 has been applied.
+
+#### 4C.0 Audit summary — what changes and why
+
+| Area | Current reality (audited) | What will change | Primary files | Risk/notes |
+|---|---|---|---|---|
+| Run context overflow | `llama-server` runs with `-c 4096` (`.env:49` / `.llamacpp/llama-server.pid` cmdline). `ContextBuilder` defaults to `16384` and reserves `4096` (`backend/app/agent/context.py:20,93,99`); `run_manager.py:188` does not pass `settings.default_context_window`. 20 tool schemas are appended after budgeting (`run_manager.py:192`), ~1.9k tokens unbudgeted. `CHEGE_DEFAULT_CONTEXT_WINDOW` is effectively dead at runtime and not passed by `docker-compose.yml`. Result: 12,351-token prompt rejected by 4,096-token server. | Unify one source of truth for usable context, budget tool schemas and completion reserve, and restart llama.cpp with a safe larger `n_ctx` (target `8192`). | `.env`, `.env.example`, `docker-compose.yml`, `backend/app/core/config.py`, `backend/app/agent/context.py`, `backend/app/agent/run_manager.py`, `scripts/llamacpp.sh` usage/docs | Requires llama-server restart (`bash scripts/llamacpp.sh restart`). Host memory is limited (~1.5 GiB available, swap in use); 16k KV cache is risky on this machine. |
+| Project creation UX | Backend `POST /api/v1/projects` works (`backend/app/api/projects_router.py:31-76`) and creates workspace + default "Main Thread". UI bug: `webui/assets/js/playground.js:170` hides `#empty-projects` when any project exists, so `#new-project-btn` reads empty hidden inputs (`:202-215`) and shows "Enter a project name". Duplicate slugs return `409`. | Replace hidden-input flow with a modal/form that always works, captures name/goal/stack/notes, shows validation/409 errors, and refreshes project/thread state. | `webui/app.html`, `webui/assets/js/playground.js`, optional shared modal helpers/CSS | Must keep `sanitize_project_name`/`resolve_in` server-side guarantees; UI-only fixes are insufficient. |
+| Thread/session UX | `POST /api/v1/sessions` exists; threads store only `project_id/title/status/todo_list_json`. Project brain/rules/workspace/git/sandbox/checkpoints are resolved at run time, not copied. UI has project/thread selectors and `+ Thread` but no title/fork/context panel. | Add thread title input, optional fork action, and a project-context panel showing inherited goal/stack/notes/workspace/todos. | `webui/app.html`, `webui/assets/js/playground.js`, `backend/app/api/sessions_router.py` (only if title/fork payload/response changes needed) | Threads share the same project workspace; concurrent runs can collide — document clearly. |
+| Settings tooltips & model config | "Agent defaults" has 3 numeric inputs only (`default_temperature`, `default_max_steps`, `default_run_timeout_seconds`) with no tooltips/help. `default_context_window` exists in config/storage but is not editable in UI and is runtime-dead. Provider fields are global URLs/keys, not per-runner/per-model config. | Add plain-language tooltips/help for every Agent defaults element, expose missing global controls that are actually consumed, and add runner-specific config sections for llama.cpp, Ollama, and OpenAI-compatible. | `webui/settings.html`, `webui/assets/js/settings.js`, `backend/app/core/config.py`, `backend/app/api/settings_router.py`, `backend/app/providers/*.py`, `backend/app/agent/run_manager.py`, `docker-compose.yml`, `.env.example`, docs | Some knobs require process restart (llama-server `-c/-ngl/host/port/model`) while others are runtime/request-level; UI must label restart requirements explicitly. Secrets must remain masked. |
+| Tool governance | 20 tools are statically registered in `backend/app/tools/registry.py`; all schemas are sent every step; no enable/disable state and no per-tool grant prompt. `GET /api/v1/tools` is read-only. `ApprovalEngine` auto-approves READ tools in all non-`ask_all` modes and `full_auto` bypasses all gates; `ApprovalPolicy` table is unused. | Add a Tools management page/API to list, describe, enable/disable, and configure "prompt user to grant before use" per tool. Disabled tools must be excluded from schemas and blocked at execution; grants must be enforced at execution time and recorded/auditable. | `backend/app/tools/*.py`, `backend/app/tools/registry.py`, `backend/app/agent/approval_engine.py`, `backend/app/agent/run_manager.py`, `backend/app/api/tools_router.py`, `backend/app/db/models.py`, `backend/app/db/database.py` (create_all), `backend/app/api/v1/__init__.py`, `webui/tools.html` (new), `webui/app.html`, `webui/assets/app.js`, `webui/assets/js/tools.js` (new), `webui/assets/js/playground.js`, `webui/assets/app.css`, all nav-bearing HTML pages | No migration framework exists; new tables must be created via SQLModel `create_all`/safe bootstrap. Text-protocol tool calls can bypass schema filtering, so execution-time checks are mandatory. Disabling tools can reduce prompt size materially. |
+| File browser | `GET /api/v1/files` returns a flat sorted list of relative file paths only (`backend/app/api/files_router.py:19-47`); UI renders a flat `<ul>` (`playground.js` file renderer). No folder nodes, no tree metadata, no empty-dir visibility. | Add a Linux `tree`-style nested file/folder view in `/app` Files tab, backed by a safe tree endpoint or client-side tree built from enriched data. Preserve `resolve_in`/path traversal safety, ignore/sort rules, size/depth/node limits, and `truncated` signaling. | `backend/app/api/files_router.py`, `backend/app/security/paths.py` (reuse only), `webui/app.html`, `webui/assets/js/playground.js`, `webui/assets/app.css`, `docs/api/contract.md` | Large workspaces must not freeze the UI or exhaust memory; symlinks/escapes must never leak outside workspace. |
+| Run phase / live visibility | UI shows only `Idle/Starting/Running/Completed/Failed` + thinking dots; SSE events exist but `tool.ask_user` and `todo.updated` are ignored, there is no `run.phase`, and no activity/log panel. SSE replay ignores `Last-Event-ID` and uses in-memory seq counters. | Add human-readable phase reporting, an Activity tab fed by persisted/SSE events, handle ignored events, and harden replay/resume behavior. | `backend/app/events/manager.py`, `backend/app/api/events_router.py`, `backend/app/agent/run_manager.py`, `backend/app/db/models.py` (if seq persistence changes), `webui/app.html`, `webui/assets/js/playground.js`, `webui/assets/app.css` | Raw server logs must not be exposed as-is in a no-auth app; prefer redacted structured activity/events. Phase labels must be server-authored/fixed strings, never model-generated HTML. |
+| Project storage location | `CHEGE_WORKDIR` is configurable but Compose mounts/binds must be changed in sync; not exposed in UI by design. | Keep UI read-only for host paths; document correct Compose changes and optionally add a dedicated `CHEGE_PROJECTS_DIR` helper/config path if approved. | `backend/app/core/config.py`, `backend/app/api/projects_router.py`, `backend/app/api/files_router.py`, `backend/app/api/runs_router.py`, `backend/app/agent/run_manager.py`, `docker-compose.yml`, `.env.example`, docs | Arbitrary host-path selection from a no-auth UI is a security risk. Any helper must still validate/contain paths. |
+| Docs and landing pages | Existing pages were updated for the v1 local-only rebuild, but do not yet describe planned settings tooltips/model config, Tools page, tree view, phase/activity UI, or context-budget fixes. | Update all user-facing docs and static pages to match shipped behavior after implementation; mark planned features clearly until shipped. | See section 8 matrix below | Landing pages are standalone HTML with duplicated nav/footer in most files; updates must be applied consistently. |
+
+#### 4C.1 Recommended implementation order (P0/P1/P2)
+
+**P0 — unblock you now**
+
+1. **New thread as immediate workaround for the 12k prompt.** Document/use `POST /api/v1/sessions` (or the Playground "New Thread" action) to start with a short history when a thread hits `exceed_context_size_error`; optionally offer fork-from-last-safe-message once P1 fork UI lands.
+2. **Fix project creation modal** (`webui/app.html` + `webui/assets/js/playground.js:170,202-215`): always-available create form/modal, fields for `name`, `goal`, `stack`, `notes`, clear inline handling for `400` invalid name and `409` duplicate slug, and auto-select the created project/thread.
+3. **Unify context budget** (`backend/app/agent/context.py`, `backend/app/agent/run_manager.py`, `backend/app/core/config.py`, `docker-compose.yml`, `.env/.env.example`): make `default_context_window` a real consumed setting, pass it into `ContextBuilder`, subtract tool-schema tokens and a realistic completion reserve, and restart llama-server with `CHEGE_LLAMACPP_CTX=8192` (`bash scripts/llamacpp.sh restart`).
+
+**P1 — usability**
+
+4. **Thread title input + optional fork action.** Add title capture on create, rename affordance if needed, and optional fork (`POST /api/v1/sessions` with `fork_from_session_id` / `up_to_message_id`) exposed in the Playground.
+5. **Project-context panel** (goal/stack/notes/workspace/todos) using `GET /api/v1/projects/{slug}` and session/todo data already returned by session APIs; make inherited/shared-workspace behavior explicit.
+6. **`run.phase` events + spinner/label UI.** Emit fixed server-authored phases from `run_manager.py` (queued/checkpoint/context build/model request/tool execution/awaiting approval/finalizing/terminal), render a visible status line/spinner in `app.html` + `playground.js`, and style in `app.css`.
+
+**P2 — observability & hardening**
+
+7. **Activity tab from SSE events; handle `todo.updated` / `tool.ask_user`.** Add an inspector Activity tab fed by persisted run events/SSE, append bounded entries, render escaped text only, and stop ignoring currently emitted events.
+8. **Fix SSE replay (`Last-Event-ID`, persisted seq counters) and `sessionStorage` resume after refresh.** Make replay idempotent across reconnects/restarts, honor `Last-Event-ID`, avoid duplicate message rendering, and restore active run/session state after page refresh where safe.
+9. **Make project creation transactional** (filesystem/workspace handling ordered safely with DB commit/rollback), pass `check=True` to git/subprocess calls where failure must not be silent, and add a `CHEGE_PROJECTS_DIR` helper only if a separate host-visible projects location is truly needed.
+
+> Implementation note: settings tooltips/model-config work, the Tools page, and the tree-style file view are substantial UX/configuration features requested alongside this order. They should be scheduled as approved P1 slices unless reprioritized: **Settings/Agent defaults + provider config = P1b**, **Tools governance page/API = P1c**, **tree file view = P1d**. Each slice must include tests, redeploy verification, and doc/landing-page updates for shipped behavior.
+
+#### 4C.2 Settings and provider/model configuration audit
+
+**Current "Agent defaults" controls (`webui/settings.html:136-158`):**
+
+| Element ID | Label | Type | Current help/tooltip | Backend field | Actually consumed at runtime? | Planned tooltip/help |
+|---|---|---|---|---|---|---|
+| `default_temperature` | Default Temperature | number `0-2`, step `0.1`, value `0.7` | none | `Settings.default_temperature` | Yes, passed into `ChatRequest` in `backend/app/agent/run_manager.py` | "Creativity/randomness for model responses. Lower = more deterministic code/answers; higher = more varied output." |
+| `default_max_steps` | Max Steps per Run | number `1-200`, value `50` | none | `Settings.default_max_steps` | **No** (`run_manager.py` hardcodes loop to 50; not wired to config) | "Maximum agent loop iterations per run before stopping. Higher allows longer tasks but can increase cost/time." Mark as pending wiring if not yet connected. |
+| `default_run_timeout_seconds` | Run Timeout (seconds) | number `30-3600`, value `300` | none | `Settings.default_run_timeout_seconds` | **No** (not enforced in `run_manager.py`) | "Overall time limit for a run. When reached, the run should stop/cancel cleanly." Mark as pending wiring if not yet connected. |
+
+**Missing but relevant global settings:**
+
+| Field | Current state | Consumer | Planned UI change |
+|---|---|---|---|
+| `default_context_window` | In `Settings`, saved/runtime-patchable, env-documented; not shown in Agent defaults | Intended for prompt budgeting but currently ignored by `ContextBuilder/run_manager`; llama.cpp actual limit is server-side `CHEGE_LLAMACPP_CTX` | Expose as "Prompt context budget (tokens)" with tooltip distinguishing agent-side budgeting from llama-server `n_ctx`; wire it in P0.3. |
+| `approval_mode` | Exists in config and run requests/policies | Approval flow / run behavior | Consider read-only display or explicit advanced control; if exposed, explain security impact (`ask_all` safest, `full_auto` bypasses gates). |
+| `sandbox_backend` | Read-only in UI today (`settings.html` runtime environment) | Sandbox selection | Keep read-only; tooltip should explain local vs docker and deploy-time configuration. |
+| `llama_cpp_n_gpu_layers` | Exists in config | `scripts/llamacpp.sh`/modelctl restart path, not hot-applied per request | Expose under llama.cpp advanced config with "requires llama-server restart" note. |
+
+**Planned tooltip/help coverage (all Agent defaults elements, no exceptions):**
+- Every label/control in the "Agent defaults" card gets a short plain-language description via help text and/or Bootstrap tooltip (`title`/`data-bs-toggle="tooltip"` or equivalent accessible pattern).
+- Every provider/runtime field gets: purpose, example/default, whether secret, and whether changing it is runtime, next-run, or restart-required.
+- Disabled/read-only controls must explain why (e.g. deploy-time/container-controlled, security-sensitive).
+
+**Provider/model configuration matrix (planned):**
+
+| Scope | Proposed controls | Backend/config changes | Restart/apply behavior | Notes |
+|---|---|---|---|---|
+| Global agent defaults | `default_provider`, `default_temperature`, `default_max_steps`, `default_run_timeout_seconds`, `default_context_window` | Wire dead fields into `run_manager.py`/`context.py`; keep validation in `settings_router.py` and `config.py` | Next run after save/runtime apply | Agent-side only; does not change llama-server KV cache. |
+| llama.cpp (runner) | base URL, active GGUF model, server `n_ctx` (`CHEGE_LLAMACPP_CTX`), host/port, `n_gpu_layers`, optional threads/batch if supported by scripts, health/model list | Extend settings schema + `/api/v1/providers/llama_cpp/*` or settings endpoints; persist runtime-safe values; update `scripts/llamacpp.sh`/`scripts/modelctl.py` contract | Most server flags require `scripts/llamacpp.sh restart`/modelctl apply; base URL/model selection may be runtime-readable | Distinguish **agent request budget** from **llama-server context**; expose current detected `n_ctx` from `/props` if added. |
+| Ollama | base URL, selected model, request `num_ctx` / `temperature` / `top_p` / `top_k` / keep-alive if supported, timeout | Extend provider request/options plumbing in `backend/app/providers/ollama.py` and run/config wiring; store per-provider defaults | Usually next request/run; service availability depends on external Ollama daemon | Only expose knobs the provider actually sends/supports. |
+| OpenAI-compatible | base URL, API key (masked), selected/default model, timeout/retries, optional max tokens/temperature overrides if supported | Extend `backend/app/providers/openai_compat.py` and settings schemas/masking; keep secret handling in `config.py`/settings router/UI | Next request/run after save | Never echo stored API keys; preserve existing mask behavior. |
+
+**Implementation tasks (settings/config):**
+
+| # | Task | Files | Acceptance criteria |
+|---|---|---|---|
+| S1 | Add tooltip/help infrastructure and descriptions for every Agent defaults and provider control | `webui/settings.html`, `webui/assets/js/settings.js`, `webui/assets/app.css` | Every control has clear plain-language help; keyboard/accessible labels preserved. |
+| S2 | Wire consumed/dead settings correctly | `backend/app/core/config.py`, `backend/app/api/settings_router.py`, `backend/app/agent/context.py`, `backend/app/agent/run_manager.py` | `default_context_window`, `default_max_steps`, `default_run_timeout_seconds` are either enforced or explicitly marked non-functional in UI/docs (prefer enforced). |
+| S3 | Add provider-specific config sections and validation | `webui/settings.html`, `webui/assets/js/settings.js`, `backend/app/api/settings_router.py`, `backend/app/providers/*.py` | UI shows only relevant knobs per runner; invalid values rejected with field-level errors; secrets masked. |
+| S4 | Add restart-required/apply semantics for llama.cpp server knobs | `scripts/llamacpp.sh`, `scripts/modelctl.py`, `backend/app/api/models_router.py` or providers router, `webui/settings.html`/`settings.js` | UI clearly distinguishes runtime vs restart-required; apply/restart path is explicit and safe. |
+| S5 | Pass runtime config through deploy/env surfaces as needed | `.env`, `.env.example`, `docker-compose.yml`, `docs/user/configuration.md`, `docs/services/fastapi.md` | Container-visible runtime settings are documented and wired; host-only llama-server settings are documented separately. |
+
+#### 4C.3 Tools management, descriptions, and grant/enable controls
+
+**Current audited state (20 registered tools):**
+
+| Category | Tools |
+|---|---|
+| File/workspace | `edit_file`, `read_file`, `write_file`, `delete_file`, `list_files` |
+| Execution/process | `run_command`, `process_start`, `process_output`, `process_kill`, `process_list` |
+| Search/git | `grep`, `git_diff`, `git_status`, `git_commit`, `git_log` |
+| Memory/interaction/planning | `memory_update`, `ask_user`, `todo_write` |
+| External | `web_fetch`, `web_search` |
+
+All are instantiated statically in `backend/app/tools/registry.py:56-80`; descriptions/schemas come from each `BaseTool`; `get_schemas()` currently returns schemas for the full enabled-by-default set unless filtered by caller (filter exists but is not used for user policy). There is no DB-backed tool configuration and no `/tools` management page.
+
+**Planned data model (preferred):**
+
+| Table | Purpose | Key fields |
+|---|---|---|
+| `tool_settings` (new) | Per-tool admin/default configuration | `tool_name` (PK/unique), `enabled` (bool, default true), `grant_mode` (`none`/`prompt_always`/future), `description_override` optional, timestamps |
+| `tool_grants` (new) | Auditable user grants | `id`, `run_id` nullable/session-scoped decision key as chosen, `tool_name`, `granted_by` (`user`/implicit only where allowed), `scope` (`once`/`run`/`session` - exact scope to be decided, prefer `run` or `once`), `created_at`, `expires_at`/consumed state |
+
+> `ApprovalPolicy` exists but is unused; do not overload it. Use explicit tool tables so enable/disable and grant prompts are queryable and testable.
+
+**API/behavior changes (planned):**
+
+| Endpoint | Change | Notes |
+|---|---|---|
+| `GET /api/v1/tools` | Expand response to include `name`, `description`, `risk`, `enabled`, `grant_required/mode`, and argument/schema metadata suitable for UI | Source descriptions from tool classes; allow safe UI formatting. |
+| `PATCH /api/v1/tools/{name}` | New: update `enabled` and grant mode | Validate known tool names only; persist in `tool_settings`. |
+| `GET /api/v1/runs/{run_id}/pending-tools` or SSE/UI payload reuse | New/reused: represent pending grant prompts distinctly from normal approvals if needed | May reuse existing approval card/event flow with a `reason=grant_required` marker. |
+| Run start/resume (`POST /api/v1/runs`, approvals flow) | Enforce disabled/grant checks before model exposure/execution | Execution-time enforcement is mandatory; schema filtering is defense-in-depth. |
+
+**Security/behavior invariants:**
+- Disabled tools must **never** be included in provider tool schemas and must **never** execute, including text-protocol/tool-name injection attempts.
+- "Prompt user to grant the tool to be used" means a user-visible approval/grant step before execution for that configured tool/scope; no silent bypass.
+- READ auto-approval behavior must be reviewed so configured grant prompts still pause when required.
+- `full_auto` interaction must be explicit: either it cannot bypass per-tool grants/disabled state, or the UI/docs must label it as overriding grants with a strong warning. Preferred: disabled always blocks; grant policy is explicit and auditable.
+- Tool descriptions shown in UI must be derived from trusted server-side metadata, not model output.
+
+**UI changes (planned):**
+- New **Tools** page (`/tools`) listing all tools with name, category, risk, plain-language description, enable/disable control, and grant-required control.
+- Add Tools to shared navigation (`webui/assets/app.js` `TOP_LINKS` for most pages) and manually to standalone landing pages as needed (`index.html` at minimum, others per section 8).
+- Playground inspector/tooling surfaces should reflect disabled/unavailable state and pending grant prompts clearly.
+
+**Prompt-size impact:** sending fewer enabled tools reduces per-step schema tokens. The audit found ~20 tools / ~1.9k schema tokens (plus provider-specific wrapper overhead). The Tools page should show an approximate schema/token impact or at least enabled-tool count so users understand the context-budget benefit.
+
+#### 4C.4 Tree-style file browser audit
+
+**Current state:** `GET /api/v1/files?project_slug=&directory=.` returns `{"files": ["relative/path", ...]}` containing regular files only, sorted flat; directories with no files are invisible. `webui/assets/js/playground.js` renders a flat clickable list. `GET /api/v1/files/content` and `/files/diff` already operate on validated file paths.
+
+**Planned implementation:**
+
+| Option | Recommendation | Rationale |
+|---|---|---|
+| Client-side tree from flat file list | Fallback only | Cannot represent empty directories, folder metadata, truncation, or explicit directory nodes without backend changes. |
+| `GET /api/v1/files/tree?project_slug=&path=.` returning nested nodes | **Preferred** | Correct for empty folders, explicit node types, depth/node limits, lazy expansion, and server-side path safety. |
+
+**Proposed response shape (example):**
+
+```json
+{
+  "root": ".",
+  "truncated": false,
+  "nodes": [
+    {
+      "name": "src",
+      "path": "src",
+      "type": "directory",
+      "children": [
+        {"name": "main.py", "path": "src/main.py", "type": "file"}
+      ]
+    },
+    {"name": "README.md", "path": "README.md", "type": "file"}
+  ]
+}
+```
+
+**Backend requirements:** reuse `resolve_in`/workspace containment; do not follow symlinks outside workspace (and decide whether to show symlinks as non-traversable nodes); sort directories before files or provide deterministic sort; enforce `max_depth` and `max_nodes`; include `truncated` and optionally counts; ignore heavy/vendor dirs only if consistent with existing behavior. **Frontend requirements:** collapsible tree rows, folder/file icons, preserved file-open behavior for file nodes, keyboard accessibility, and no HTML injection in names/paths (`escapeHtml`/DOM APIs).
+
+#### 4C.5 Run phase, activity feed, and SSE hardening audit
+
+**Current emitted events (backend):** `run.started`, `message.delta`, `thinking.delta`, `tool.started`, `tool.output`, `tool.completed`, `tool.approval_required`, `tool.ask_user`, `todo.updated`, `run.completed`, `run.failed`, `run.cancelled` (exact set to be reconfirmed during implementation). **Frontend handles:** core run/message/tool/approval/terminal events; **ignores/mishandles:** `tool.ask_user`, `todo.updated`; **missing:** `run.phase`, activity UI, reconnect dedupe/resume.
+
+**Planned changes:**
+
+| # | Task | Files | Acceptance criteria |
+|---|---|---|---|
+| V1 | Emit `run.phase` events at checkpoint, planning/step start, provider wait, tool execution, approval wait, finalization, terminal | `backend/app/agent/run_manager.py`, event models/docs if needed | UI can show human-readable current phase and step progress without parsing logs. |
+| V2 | Add Playground phase indicator/spinner and step label | `webui/app.html`, `webui/assets/js/playground.js`, `webui/assets/app.css` | Visible from run start to terminal state; accessible status text. |
+| V3 | Add Activity inspector tab fed by event stream | `webui/app.html`, `webui/assets/js/playground.js`, `webui/assets/app.css` | Shows ordered, escaped, bounded event summaries; handles `tool.ask_user` and `todo.updated`. |
+| V4 | Harden SSE replay/resume | `backend/app/events/manager.py`, `backend/app/api/events_router.py`, `backend/app/db/models.py` if needed, `webui/assets/js/playground.js` | `Last-Event-ID` honored, no duplicate replay on reconnect, counters survive restart or are derived safely, refresh can resume active run view safely. |
+| V5 | Optional raw server logs (deferred/opt-in only) | new endpoint/UI only if approved | Must redact secrets, bind to loopback assumptions, and avoid unbounded streaming; structured activity remains the default. |
+
+#### 4C.6 File-by-file implementation checklist (planned)
+
+| Slice | Files expected to change | Notes |
+|---|---|---|
+| P0 context budget | `backend/app/agent/context.py`, `backend/app/agent/run_manager.py`, `backend/app/core/config.py`, `backend/app/api/settings_router.py`, `docker-compose.yml`, `.env`, `.env.example`, `webui/settings.html`, `webui/assets/js/settings.js` | Restart llama-server after `CHEGE_LLAMACPP_CTX` change. |
+| P0 project modal | `webui/app.html`, `webui/assets/js/playground.js`, optionally `webui/assets/app.css` | Backend already supports goal/stack/notes. |
+| P1 thread/project context | `webui/app.html`, `webui/assets/js/playground.js`, `backend/app/api/sessions_router.py` (if needed) | Keep shared-workspace semantics explicit. |
+| P1 phases/activity | `backend/app/events/manager.py`, `backend/app/api/events_router.py`, `backend/app/agent/run_manager.py`, `webui/app.html`, `webui/assets/js/playground.js`, `webui/assets/app.css` | Prefer additive event types/payloads. |
+| P1b settings/model config | `webui/settings.html`, `webui/assets/js/settings.js`, `backend/app/core/config.py`, `backend/app/api/settings_router.py`, `backend/app/providers/ollama.py`, `backend/app/providers/openai_compat.py`, `backend/app/providers/factory.py`, `backend/app/api/models_router.py`, `scripts/llamacpp.sh`, `scripts/modelctl.py` as needed | Distinguish runtime vs restart-required knobs. |
+| P1c tools page/governance | `backend/app/tools/base.py`, `backend/app/tools/registry.py`, all tool modules only if descriptions/metadata need normalization, `backend/app/agent/approval_engine.py`, `backend/app/agent/run_manager.py`, `backend/app/api/tools_router.py`, `backend/app/db/models.py`, `backend/app/api/v1/__init__.py`, `backend/app/main.py` (page route), `webui/tools.html`, `webui/assets/js/tools.js`, `webui/assets/app.js`, `webui/app.html`, `webui/assets/js/playground.js`, all nav-bearing HTML files | Add DB bootstrap for new tables; enforce at execution time. |
+| P1d tree file view | `backend/app/api/files_router.py`, `webui/app.html`, `webui/assets/js/playground.js`, `webui/assets/app.css`, `docs/api/contract.md` | Preserve path safety and existing content/diff endpoints. |
+| P2 hardening | `backend/app/events/manager.py`, `backend/app/api/events_router.py`, `backend/app/api/projects_router.py`, `backend/app/db/models.py`, selected git/checkpoint callers, config/path helpers | Transactional creation and replay correctness. |
+| Verification/docs | `tests/*` (new/updated), all files in section 8 matrix | Run targeted tests + full pytest + isolated redeploy + manual smoke checks per batch. |
+
+#### 4C.7 Verification and acceptance criteria (planned additions)
+
+- **P0:** A prompt that previously failed at 12,351 tokens either succeeds within the configured context or fails with a clear, actionable context-budget message before provider submission; project creation works from a modal regardless of existing projects; duplicate slug shows a specific 409 message.
+- **P1:** Every Agent defaults control has tooltip/help text; provider-specific settings are validated and correctly applied or clearly marked restart-required; Tools page lists all tools with descriptions and persisted enable/grant settings; disabled tools do not appear in schemas and cannot execute; `/app` shows a nested tree with expandable folders and safe file open.
+- **P1 visibility:** Run UI shows current phase/step and an Activity tab records handled events in order without duplicates during normal streaming.
+- **P2:** SSE reconnect/resume does not duplicate or skip persisted events; project creation has no orphan DB/filesystem state on partial failure.
+- **Regression:** `bash scripts/deploy.sh --isolated` recreates only the intended Chege container(s); `/healthz`, `/readyz`, `/api/v1/openapi.json`, `/app`, `/settings`, `/tools`, `/models`, `/status` return expected responses; existing unrelated containers remain untouched.
+
+#### 4C.8 Shipped verification evidence
+
+| Check | Result |
+|---|---|
+| `bash -n scripts/deploy.sh`; `docker compose config -q`; Python `compileall` | Passed |
+| `./py-env/bin/python -m pytest -q` | **40 passed, 2 warnings** |
+| `bash scripts/deploy.sh --isolated` | Succeeded; only `chege-local-agent` recreated; `chege-local-proxy` and all unrelated containers untouched |
+| Live HTTP 200 | `/healthz`, `/readyz`, `/api/v1/openapi.json`, `/`, `/app`, `/settings`, `/tools`, `/models`, `/status`, `/guide`, `/api` |
+| Live API | `/api/v1/settings` exposes all new fields; `/api/v1/tools` returns 20 tools with `purpose`/`enabled`/`grant_mode`; `/api/v1/files/tree?project_slug=js-calculator` returns nested nodes |
+| Context-budget smoke run | Run `6c7d7ae1-…` completed with `run.started`, `run.phase`, `message.delta`, `run.completed`; llama log showed `n_tokens = 2048` (previously 12,351 tokens overflowed) |
+| llama-server restart | `bash scripts/llamacpp.sh restart` → `ctx=8192, ngl=0` |
+| Browser — `/settings` | No console errors or failed requests; all fields populated; 25 tooltips initialized and showing; provider panels switch between `llama_cpp`/`ollama` |
+| Browser — `/tools` | No console errors; 20 cards; search and risk filters work; `PATCH /tools/edit_file` persisted and was restored to defaults |
+| Browser — `/app` | No JS errors; projects/sessions/providers/models/tools load; tree shows files and opens content; Context/Activity/Tools tabs and project/thread/fork modals work; UI SSE run completed with phase indicator shown then hidden and Activity populated |
+| Cleanup | Temporary UI-check fork and its messages/runs/events/checkpoints deleted from `data/chege.db`; tool settings restored to defaults |
+
+**Known limitation (not a Phase 4C blocker):** `GET /api/v1/runs/{id}` still reports `prompt_tokens: 0` and `completion_tokens: 0` after completed runs; run status and events are correct, but token metrics are not yet written into the run record.
+
 ### Phase 5 — Verification and definition of done
 
 **Manual smoke test (local machine, local LLM running):**
 
-1. `bash scripts/deploy.sh` (or `bash scripts/deploy.sh --with-postgres` for the internal DB).
-2. `curl -f http://127.0.0.1:8000/healthz` → `{"status":"ok",...}`
-3. Open the landing page at `http://127.0.0.1:8000/`, then enter the playground at `/app`; create a project and session.
+1. `bash scripts/deploy.sh --isolated` (the canonical local deploy; leaves unrelated containers untouched).
+2. `curl -f http://127.0.0.1:8001/healthz` → `{"status":"ok",...}`
+3. Open the landing page at `http://127.0.0.1:8001/`, then enter the playground at `/app`; create a project (name/goal/stack/notes) and a thread from the modals.
 4. Send: "Create `calc.py` with an add function and run `pytest`."
-5. Observe streamed tokens and tool events; `pytest` is auto-approved under `auto_edit`, while a destructive command such as `rm` must show an approval card.
-6. Inspect the file tree, diff, and Git history; trigger revert and confirm the workspace is restored.
+5. Observe streamed tokens, the phase indicator, the Activity tab, and tool events; `pytest` is auto-approved under `auto_edit`, while a destructive command such as `rm` must show an approval card.
+6. Inspect the tree-style file browser, diff, and Git history; trigger revert and confirm the workspace is restored.
 7. Cancel a long run mid-stream and confirm `run.cancelled` is the final event.
-8. Reconnect an SSE client with `?after=<seq>` and confirm no duplicated/missing events.
+8. Reconnect an SSE client with `Last-Event-ID` (or `?after=<seq>`) and confirm no duplicated/missing events.
 
 **Automated checks:**
 
@@ -330,3 +552,35 @@ The audit below was taken before the cleanup. The alias row and the status-code 
 **Applied decision:** Option B — AdminLTE 4.10.2 was adopted as the dashboard layout. The chat/diff widgets use shared design tokens from `webui/assets/app.css`, and all assets (including Font Awesome, marked, DOMPurify, highlight.js and diff2html) are vendored under `webui/assets/` for offline use.
 
 **Landing/docs information architecture:** `/` landing (what it is, architecture, 60-second quickstart, safety model, links), `/guide` (how it works: project → session → prompt → stream → approve → inspect/revert, provider setup, example prompts, FAQ), `/setup` (Docker/native install, config table, Postgres opt-in, SSH-tunnel remote access, backups), `/app` (workspace), with `/docs` reserved for Swagger.
+
+---
+
+## 8. Docs and landing-page update matrix (APPLIED after Phase 4C shipped)
+
+This matrix has been applied: user-facing docs and static pages were updated only after the features were shipped and verified, so pages do not describe behavior that is not present. The static pages mostly duplicate nav/footer markup, so the `/tools` link was applied file by file. Verification evidence (40 passing tests, isolated redeploy, live and browser checks) is in **4C.8**. The consistency checks at the end of this section were run against the edited files.
+
+| File | Sections to update | New content required |
+|---|---|---|
+| `webui/index.html` | Feature highlights, safety model, navigation/footer, quickstart links | Mention Tools management + grants, tree file browsing, visible run phases/activity, and config-tooltips; add `/tools` nav link if the standalone landing exposes full nav. |
+| `webui/guide.html` | Workflow walkthrough, project/thread creation, run/progress, tool approval, file inspection, FAQ | Explain the new project-creation modal and fields; thread title/fork + inherited project context; how to read run phase/activity; how tool enable/disable + grant prompts behave; tree file browsing. |
+| `webui/setup.html` | Config table, provider setup, env vars, restart instructions | Document `CHEGE_LLAMACPP_CTX=8192` and llama-server restart requirement; provider-specific settings (llama.cpp/Ollama/OpenAI-compatible); any new env/Compose settings; optional `CHEGE_PROJECTS_DIR` only if implemented. |
+| `webui/api.html` | Endpoint list, request/response examples | Add `GET/PATCH /api/v1/tools`, `GET /api/v1/files/tree`, any new grant/config endpoints, `run.phase` event, and expanded `GET /tools` response shape. |
+| `webui/security.html` | Local-only model, approvals, sandbox, grants | Explain tool enable/disable + grant prompts, `full_auto` interaction, disabled-tool enforcement, and no-auth loopback assumptions; clarify raw server logs are not exposed. |
+| `webui/status.html` | Capabilities/status table, known limitations | Mark shipped Phase 4C features; note context budget/limitations and that unknown long histories should use a new thread; show current provider/runner config summary if present. |
+| `webui/settings.html` | Tooltips/help text, Agent defaults, provider sections | Shipped tooltips and provider/model config controls, restart-required labels, and correct read-only explanations. |
+| `webui/models.html` | Model/provider management instructions | Per-runner model config, context/n_ctx distinction, apply/restart behavior, and how provider-specific model selection is saved. |
+| `README.md` | Feature list, quickstart, configuration, "how it works" | Update feature summary with Tools page, tree view, run visibility, and unified context budget; correct any stale ports/env defaults. |
+| `docs/README.md` | Docs index/links | Add/link Tools governance, file tree, settings/model config, and observability docs; keep status of planned vs shipped accurate. |
+| `docs/api/contract.md` | Endpoint contracts, SSE events, file routes | Add new endpoints, expanded tool object fields, `files/tree` JSON shape, `run.phase`, and updated SSE replay semantics. |
+| `docs/user/*.md` | Task-oriented guides | Update project/thread workflows, settings/provider configuration, tool grants, file browsing, and reading run activity; reflect new tooltips/labels. |
+| `docs/architecture/*.md` | Component/data-flow diagrams, DB model, event model | Add tool settings/grants tables, tool filtering/execution guards, context-budget flow, tree endpoint, phase/activity event flow, and SSE replay changes. |
+| `docs/services/fastapi.md` | Route list, request flows, config/env | Reflect v1 endpoints added in Phase 4C, config fields wired/unwired, provider plumbing, and event emission points. |
+| `docs/runbooks/restart.md` | Restart/apply matrix | Document when to restart llama-server (`CHEGE_LLAMACPP_CTX`, model, n_gpu_layers), when only the agent container needs `bash scripts/deploy.sh --isolated`, and which settings are runtime/next-run. |
+| `docs/engineering/implementation-plan.md` | This Phase 4C + section 8 | After each slice, flip "planned" rows to shipped with verification evidence (commit, tests, redeploy result). |
+
+**Landing-page consistency checks after edits:**
+- Every nav/footer copy includes the `/tools` link where the full navigation is shown.
+- Every page uses the canonical local URL port **8001** in examples (`http://127.0.0.1:8001/...`) and never **8000**.
+- No page describes auth/users/tenants, `/auth/*`, legacy `/api/*`, tokens, or multi-user behavior.
+- Provider/runner terminology is consistent (llama.cpp vs Ollama vs OpenAI-compatible) and restart requirements match the actual implementation.
+- Planned-but-not-shipped features are explicitly labeled as planned.

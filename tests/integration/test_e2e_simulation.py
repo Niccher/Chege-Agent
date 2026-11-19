@@ -1,14 +1,12 @@
-import asyncio
 import json
 from pathlib import Path
-import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 
 from backend.app.core.config import get_settings
 from backend.app.db.database import get_db_session
 from backend.app.main import create_app
-from backend.app.providers.base import ChatChunk, ModelOptions, Provider
+from backend.app.providers.base import ChatChunk, Provider
 from backend.app.agent.run_manager import RunManager
 from backend.app.sandbox.local import LocalSandbox
 

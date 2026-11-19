@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from sqlmodel import Session, select
 from backend.app.core.config import get_settings
 from backend.app.core.logging import get_logger

@@ -14,7 +14,6 @@ from backend.app.tools.file_tools import (
     WriteFileInput,
     WriteFileTool,
 )
-from backend.app.tools.search_tools import GrepInput, GrepTool
 from backend.app.tools.exec_tools import RunCommandInput, RunCommandTool
 
 

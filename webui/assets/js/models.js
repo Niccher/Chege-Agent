@@ -1,7 +1,44 @@
-/* Models page — download and select local models for llama.cpp and Ollama. */
+/* Models page — installed models, capabilities, selection and downloads. */
 (function () {
   const $ = (id) => document.getElementById(id);
   const esc = (value) => Chege.escapeHtml(value);
+
+  const CAP_META = {
+    tools: { label: 'Tools', icon: 'fa-wrench', cls: 'cap-tools' },
+    vision: { label: 'Vision', icon: 'fa-eye', cls: 'cap-vision' },
+    ocr: { label: 'OCR', icon: 'fa-image', cls: 'cap-vision' },
+    code: { label: 'Code', icon: 'fa-code', cls: 'cap-tools' },
+    general: { label: 'General', icon: 'fa-comment', cls: 'cap-unknown' },
+    reasoning: { label: 'Reasoning', icon: 'fa-brain', cls: 'cap-reasoning' },
+    thinking: { label: 'Thinking', icon: 'fa-brain', cls: 'cap-reasoning' },
+    lightweight: { label: 'Light', icon: 'fa-feather', cls: 'cap-unknown' },
+    completion: { label: 'Text', icon: 'fa-align-left', cls: 'cap-unknown' },
+    insert: { label: 'Insert', icon: 'fa-i-cursor', cls: 'cap-unknown' },
+    'no-tools': { label: 'No tools', icon: 'fa-ban', cls: 'cap-no-tools' },
+  };
+
+  function capBadge(cap) {
+    const meta = CAP_META[cap] || { label: cap, icon: 'fa-circle', cls: 'cap-unknown' };
+    return `<span class="cap-badge ${meta.cls}"><i class="fas ${meta.icon}"></i> ${esc(meta.label)}</span>`;
+  }
+
+  function capabilityBadges(model) {
+    const caps = Array.isArray(model.capabilities) ? model.capabilities.slice() : [];
+    const badges = [];
+    if (model.supports_tools === true) badges.push(capBadge('tools'));
+    else if (model.supports_tools === false && model.capabilities_known) badges.push(capBadge('no-tools'));
+    else badges.push(`<span class="cap-badge cap-unknown"><i class="fas fa-question"></i> Unknown</span>`);
+
+    caps.forEach((cap) => {
+      if (cap === 'tools' || cap === 'completion') return;
+      badges.push(capBadge(cap));
+    });
+    return `<div class="model-capabilities">${badges.join('')}</div>`;
+  }
+
+  function catalogBadges(caps) {
+    return `<div class="model-capabilities">${(caps || []).map(capBadge).join('')}</div>`;
+  }
 
   function formatSize(bytes) {
     if (!bytes || bytes <= 0) return 'unknown size';
@@ -16,17 +53,18 @@
     el.className = 'chege-status-badge ' + (available ? 'is-ok' : 'is-bad');
   }
 
-  function modelRow(name, meta, isActive, actionLabel, actionFn, extra) {
+  function modelRow(name, meta, isActive, actionLabel, actionValue, model) {
+    const caps = model || {};
     return `<div class="chege-model-row${isActive ? ' is-active' : ''}">
       <div class="chege-model-info">
         <span class="chege-model-name" title="${esc(name)}">${esc(name)}</span>
         <span class="chege-model-meta">${esc(meta)}</span>
-        ${extra || ''}
+        ${capabilityBadges(caps)}
       </div>
       <div class="chege-model-actions">
         ${isActive
-          ? '<span class="badge bg-success">In use</span>'
-          : `<button class="btn btn-sm btn-outline-primary" data-model-action="${esc(actionLabel)}" type="button">${esc(actionLabel)}</button>`}
+          ? '<span class="badge bg-success">Active</span>'
+          : `<button class="btn btn-sm btn-outline-primary" data-model-action="${esc(actionValue)}" type="button">${esc(actionLabel)}</button>`}
       </div>
     </div>`;
   }
@@ -37,17 +75,19 @@
       const lc = data.llamacpp || {};
       const ol = data.ollama || {};
       const selected = data.selected || {};
+      const activeProvider = data.active_provider || '—';
 
       stateBadge($('llamacpp-state'), !!lc.available, lc.available ? 'Serving' : 'Unavailable');
       stateBadge($('ollama-state'), !!ol.available, ol.available ? 'Ready' : 'Unavailable');
+      $('active-provider-badge').innerHTML = `<i class="fas fa-plug"></i> Active: ${esc(activeProvider)}`;
 
       const lcModels = lc.models || [];
       $('llamacpp-models').innerHTML = lcModels.length
         ? lcModels.map((m) => {
-            const active = !!m.active || (!selected.llamacpp && !!lc.active && m.path === lc.active);
+            const active = !!m.active && activeProvider === 'llama_cpp';
             return modelRow(
               m.name, formatSize(m.size) + ' · ' + m.path,
-              active, 'Use', 'llamacpp:' + m.path
+              active, 'Use', 'llamacpp:' + m.path, m
             );
           }).join('')
         : `<div class="text-muted small">${esc(lc.error || 'No GGUF models found. Download one below.')}</div>`;
@@ -55,22 +95,26 @@
       const olModels = ol.models || [];
       $('ollama-models').innerHTML = olModels.length
         ? olModels.map((m) => {
-            const active = m.name === selected.ollama;
-            return modelRow(m.name, formatSize(m.size) + (m.family ? ' · ' + m.family : ''),
-              active, 'Use', 'ollama:' + m.name);
+            const active = m.name === selected.ollama && activeProvider === 'ollama';
+            const size = formatSize(m.size);
+            const bits = [size, m.family, m.parameter_size, m.quantization, m.context_length ? m.context_length + ' ctx' : '']
+              .filter(Boolean).join(' · ');
+            return modelRow(m.name, bits, active, 'Use', 'ollama:' + m.name, m);
           }).join('')
         : `<div class="text-muted small">${esc(ol.error || 'No Ollama models found. Pull one below.')}</div>`;
 
+      const toolCount = lcModels.filter((m) => m.supports_tools === true).length
+        + olModels.filter((m) => m.supports_tools === true).length;
+      const visionCount = lcModels.filter((m) => m.supports_vision).length
+        + olModels.filter((m) => m.supports_vision).length;
       $('models-summary').textContent =
         `${lcModels.length} GGUF · ${olModels.length} Ollama model${olModels.length === 1 ? '' : 's'}`;
       $('models-detail').textContent =
-        `Active provider: ${data.active_provider || '—'} · selection saved automatically for new runs.`;
+        `Active provider: ${activeProvider} · ${toolCount} tool-capable · ${visionCount} vision/OCR · ` +
+        'Selection switches the active provider.';
       $('models-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
-      // Persist action details on the buttons for the click handler.
-      document.querySelectorAll('[data-model-action]').forEach((btn) => {
-        btn.dataset.value = btn.getAttribute('data-model-action');
-      });
+      loadCatalog();
     } catch (e) {
       Chege.alertBox('Could not load models: ' + e.message, 'danger');
       $('models-summary').textContent = 'Model manager unavailable';
@@ -81,6 +125,7 @@
   function progress(prefix, event) {
     const bar = $(prefix + '-progress-bar');
     const label = $(prefix + '-progress');
+    if (!bar || !label) return;
     if (event.status === 'downloading' && event.downloaded) {
       const mb = (event.downloaded / 1024 / 1024).toFixed(1);
       bar.style.width = '65%';
@@ -105,8 +150,8 @@
   async function stream(url, body, prefix) {
     const bar = $(prefix + '-progress-bar');
     const label = $(prefix + '-progress');
-    bar.style.width = '5%';
-    label.textContent = 'Starting…';
+    if (bar) bar.style.width = '5%';
+    if (label) label.textContent = 'Starting…';
     try {
       const res = await fetch(Chege.API + url, {
         method: 'POST',
@@ -137,6 +182,58 @@
     }
   }
 
+  function downloadUrl() {
+    return $('gguf-url').value.trim();
+  }
+
+  function downloadName() {
+    return $('gguf-name').value.trim();
+  }
+
+  function hfToken() {
+    return $('hf-token').value.trim();
+  }
+
+  function startCustomDownload() {
+    const url = downloadUrl();
+    if (!url) { Chege.alertBox('Paste a GGUF URL first.', 'warning'); return; }
+    stream('/models/llamacpp/download', { url, name: downloadName() || null, hf_token: hfToken() || null }, 'gguf');
+  }
+
+  function startCatalogDownload(url, name) {
+    stream('/models/llamacpp/download', { url, name, hf_token: hfToken() || null }, 'catalog');
+  }
+
+  async function loadCatalog() {
+    try {
+      const data = await Chege.api('/models/catalog');
+      const models = data.models || [];
+      $('catalog-list').innerHTML = models.length
+        ? models.map((m) => {
+            const bits = [
+              m.parameters, m.quantization, formatSize(m.size_bytes), m.license,
+            ].filter(Boolean).join(' · ');
+            return `<div class="model-catalog-row">
+              <div class="model-catalog-main">
+                <span class="model-catalog-title">${esc(m.name)}${m.recommended ? ' <span class="badge bg-success">Recommended</span>' : ''}</span>
+                <span class="model-catalog-meta">${esc(m.repo)} / ${esc(m.file)} · ${esc(bits)}</span>
+                ${catalogBadges(m.capabilities)}
+                <span class="chege-setting-help">${esc(m.notes || '')}${m.requires_mmproj ? ' Requires an mmproj file for images.' : ''}</span>
+              </div>
+              <div class="model-catalog-actions">
+                <button class="btn btn-sm btn-primary" type="button"
+                  data-catalog-url="${esc(m.url)}" data-catalog-name="${esc(m.file)}">
+                  <i class="fas fa-download"></i> Download
+                </button>
+              </div>
+            </div>`;
+          }).join('')
+        : '<div class="text-muted small">Catalog unavailable.</div>';
+    } catch (e) {
+      $('catalog-list').innerHTML = '<div class="text-danger small">Could not load catalog: ' + esc(e.message) + '</div>';
+    }
+  }
+
   async function selectModel(value) {
     const [provider, ...rest] = value.split(':');
     const model = rest.join(':');
@@ -163,12 +260,7 @@
     Chege.shell('/models');
     $('refresh-models').addEventListener('click', load);
 
-    $('gguf-download').addEventListener('click', () => {
-      const url = $('gguf-url').value.trim();
-      if (!url) { Chege.alertBox('Paste a GGUF URL first.', 'warning'); return; }
-      stream('/models/llamacpp/download', { url }, 'gguf');
-    });
-
+    $('gguf-download').addEventListener('click', startCustomDownload);
     $('ollama-pull').addEventListener('click', () => {
       const name = $('ollama-tag').value.trim();
       if (!name) { Chege.alertBox('Enter an Ollama model tag first.', 'warning'); return; }
@@ -176,8 +268,13 @@
     });
 
     document.addEventListener('click', (event) => {
+      const catalogBtn = event.target.closest('[data-catalog-url]');
+      if (catalogBtn) {
+        startCatalogDownload(catalogBtn.dataset.catalogUrl, catalogBtn.dataset.catalogName);
+        return;
+      }
       const btn = event.target.closest('[data-model-action]');
-      if (btn) selectModel(btn.dataset.value);
+      if (btn) selectModel(btn.dataset.modelAction);
     });
 
     load();

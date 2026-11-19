@@ -3,6 +3,7 @@ import shlex
 from typing import Any
 from sqlmodel import Session
 from backend.app.db.models import ToolCall
+from backend.app.tools import governance
 from backend.app.tools.base import BaseTool, RiskLevel
 
 
@@ -40,10 +41,11 @@ class ApprovalEngine:
 
     _SHELL_TOKENS = {";", "&&", "||", "|", "`", ">", ">>", "<"}
 
-    def __init__(self, db: Session, project_id: str, policy_mode: str = "auto_edit"):
+    def __init__(self, db: Session, project_id: str, policy_mode: str = "auto_edit", run_id: str | None = None):
         self.db = db
         self.project_id = project_id
         self.policy_mode = policy_mode  # ask_all, auto_edit, full_auto
+        self.run_id = run_id
 
     def _is_safe_command(self, command: str) -> bool:
         try:
@@ -59,29 +61,46 @@ class ApprovalEngine:
         return tuple(argv) in self._SAFE_ARGV
 
     def evaluate(self, tool: BaseTool, args: dict[str, Any]) -> ApprovalDecision:
-        # 1. READ tools are always safe.
-        if tool.risk == RiskLevel.READ:
-            return ApprovalDecision(requires_approval=False, reason="Read-only operation")
+        # 1. Governance is checked first and cannot be bypassed by any policy.
+        if not governance.is_enabled(self.db, tool.name):
+            return ApprovalDecision(
+                requires_approval=True,
+                reason=f"Tool '{tool.name}' is disabled in the Tools console. Enable it to use it.",
+            )
 
-        # 2. Explicit full-auto is the only mode that bypasses all gates.
-        if self.policy_mode == "full_auto":
-            return ApprovalDecision(requires_approval=False, reason="Full Auto policy enabled")
+        # 2. A configured grant must be given before the tool can run, even in
+        # full_auto. The grant is recorded when the user approves the prompt.
+        if governance.grant_required(self.db, tool.name):
+            if not self.run_id or not governance.has_grant(self.db, self.run_id, tool.name):
+                return ApprovalDecision(
+                    requires_approval=True,
+                    reason=f"Grant required: you must allow '{tool.name}' before this run can use it.",
+                )
 
+        # 3. ask_all asks even for read-only tools.
         if self.policy_mode == "ask_all":
             return ApprovalDecision(requires_approval=True, reason="Ask Everything policy active")
 
-        # 3. Destructive operations always require confirmation under auto_edit.
+        # 4. full_auto bypasses risk gates, but never governance (1 and 2 above).
+        if self.policy_mode == "full_auto":
+            return ApprovalDecision(requires_approval=False, reason="Full Auto policy enabled")
+
+        # 5. READ tools are safe under the remaining policies.
+        if tool.risk == RiskLevel.READ:
+            return ApprovalDecision(requires_approval=False, reason="Read-only operation")
+
+        # 6. Destructive operations always require confirmation under auto_edit.
         if tool.name in self._DESTRUCTIVE_TOOLS:
             return ApprovalDecision(
                 requires_approval=True,
                 reason=f"Destructive action '{tool.name}' requires explicit confirmation",
             )
 
-        # 4. Ordinary file writes are allowed under auto_edit.
+        # 7. Ordinary file writes are allowed under auto_edit.
         if tool.risk == RiskLevel.WRITE:
             return ApprovalDecision(requires_approval=False, reason="File writes allowed under auto_edit")
 
-        # 5. Commands must match an exact, shell-free argv tuple.
+        # 8. Commands must match an exact, shell-free argv tuple.
         if tool.name == "run_command" and self._is_safe_command(args.get("command", "")):
             return ApprovalDecision(requires_approval=False, reason="Command is in safe allowlist")
 

@@ -1,7 +1,12 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
+from backend.app.db.cascade import (
+    delete_session_records,
+    has_active_runs,
+    run_ids_for_sessions,
+)
 from backend.app.db.database import get_db_session
 from backend.app.db.models import Message, Project, Session as DBSession
 
@@ -48,6 +53,30 @@ def create_session(request: CreateSessionRequest, response: Response, db: Sessio
     db.refresh(new_sess)
     response.headers["Location"] = f"/api/v1/sessions/{new_sess.id}"
     return {"session": new_sess.model_dump()}
+
+
+@router.delete("/{session_id}")
+def delete_session(
+    session_id: str,
+    confirm: str = Query(..., description="Type the exact session ID to confirm deletion"),
+    db: Session = Depends(get_db_session),
+):
+    """Delete one thread and its messages/runs/events. The workspace is kept."""
+    session_rec = db.get(DBSession, session_id)
+    if not session_rec:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if confirm != session_id:
+        raise HTTPException(status_code=400, detail="Confirmation must match the session ID")
+
+    run_ids = run_ids_for_sessions(db, [session_id])
+    if has_active_runs(db, run_ids):
+        raise HTTPException(
+            status_code=409,
+            detail="This thread has an active run. Cancel it before deleting the thread.",
+        )
+
+    stats = delete_session_records(db, [session_id])
+    return {"status": "deleted", "session_id": session_id, "deleted": stats}
 
 
 @router.get("/{session_id}")
@@ -110,6 +139,7 @@ def fork_session(
             tool_calls_json=m.tool_calls_json,
             tool_call_id=m.tool_call_id,
             tool_name=m.tool_name,
+            metrics_json=m.metrics_json,
         )
         db.add(copied_msg)
         copied_count += 1

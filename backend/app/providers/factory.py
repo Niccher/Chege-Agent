@@ -14,11 +14,24 @@ def get_provider(provider_name: str | None = None, settings: Settings | None = N
     target = (provider_name or cfg.default_provider).lower()
 
     if target == "llama_cpp":
-        return LlamaCppProvider(base_url=cfg.llamacpp_url)
+        return LlamaCppProvider(
+            base_url=cfg.llamacpp_url,
+            timeout=cfg.provider_timeout_seconds,
+        )
     elif target == "ollama":
-        return OllamaProvider(base_url=cfg.ollama_url)
+        return OllamaProvider(
+            base_url=cfg.ollama_url,
+            timeout=cfg.provider_timeout_seconds,
+        )
     elif target == "openai":
-        return OpenAICompatProvider(base_url=cfg.openai_base_url, api_key=cfg.openai_api_key)
+        return OpenAICompatProvider(
+            base_url=cfg.openai_base_url,
+            api_key=cfg.openai_api_key,
+            timeout=cfg.provider_timeout_seconds,
+        )
     else:
         # Fallback to default configured provider
-        return LlamaCppProvider(base_url=cfg.llamacpp_url)
+        return LlamaCppProvider(
+            base_url=cfg.llamacpp_url,
+            timeout=cfg.provider_timeout_seconds,
+        )

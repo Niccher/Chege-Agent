@@ -33,14 +33,25 @@
     <section class="app-content"><div class="container-fluid">
       <div id="chege-alerts"></div>
 
+      <div class="callout callout-info"><b>Local URL:</b> <code>http://127.0.0.1:8001/models</code>. Selecting a model
+        saves it and makes its provider active for new runs. Provider and context settings are managed in the
+        <a href="/settings">Settings console</a>.</div>
+
       <div class="chege-status-hero d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
           <span class="chege-badge"><i class="fas fa-brain"></i> Local model manager</span>
           <h2 class="mt-3 mb-1" id="models-summary">Loading installed models…</h2>
           <p id="models-detail">Checking llama.cpp and Ollama endpoints.</p>
+          <div class="model-capability-legend small">
+            <span class="cap-badge cap-tools"><i class="fas fa-wrench"></i> Tools</span>
+            <span class="cap-badge cap-vision"><i class="fas fa-eye"></i> Vision/OCR</span>
+            <span class="cap-badge cap-no-tools"><i class="fas fa-ban"></i> No tool calling</span>
+            <span class="cap-badge cap-unknown"><i class="fas fa-question"></i> Unknown</span>
+          </div>
         </div>
         <div class="text-end">
           <div class="small" id="models-updated">—</div>
+          <div class="mt-2"><span class="chege-badge" id="active-provider-badge"><i class="fas fa-plug"></i> Active: —</span></div>
           <button id="refresh-models" class="btn btn-sm btn-light mt-2"><i class="fas fa-rotate"></i> Refresh</button>
         </div>
       </div>
@@ -53,15 +64,18 @@
               <span class="chege-status-badge" id="llamacpp-state">—</span>
             </div>
             <div class="card-body">
-              <p class="chege-model-help">GGUF files live on the host and are served by <code>llama-server</code>. Selecting a model restarts it to load your choice.</p>
+              <p class="chege-model-help">GGUF files live on the host and are served by <code>llama-server</code>. Selecting a model
+                restarts it to load your choice (<code>bash scripts/llamacpp.sh restart</code>).</p>
               <div id="llamacpp-models"><div class="text-muted small">Loading…</div></div>
               <hr>
               <label class="form-label" for="gguf-url">Download a GGUF model</label>
-              <div class="input-group input-group-sm">
+              <div class="input-group input-group-sm mb-2">
                 <input id="gguf-url" class="form-control" placeholder="https://huggingface.co/.../model.gguf">
+                <input id="gguf-name" class="form-control" placeholder="Optional filename.gguf">
                 <button id="gguf-download" class="btn btn-primary" type="button"><i class="fas fa-download"></i> Download</button>
               </div>
-              <span class="chege-setting-help">Paste a direct <code>.gguf</code> URL (e.g. a Hugging Face <code>resolve/main</code> link). Large files may take several minutes.</span>
+              <span class="chege-setting-help">Paste a direct <code>.gguf</code> URL (e.g. a Hugging Face <code>resolve/main</code> link).
+                For gated or private repositories, enter the token in the Hugging Face catalog card below. Large files may take several minutes.</span>
               <div class="chege-progress mt-3"><div class="chege-progress-bar" id="gguf-progress-bar"></div></div>
               <div class="chege-progress-label" id="gguf-progress">Ready.</div>
             </div>
@@ -91,19 +105,69 @@
         </div>
       </div>
 
+      <div class="chege-settings-card mt-3" id="hf-catalog">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-cloud-arrow-down chege-section-icon"></i>Hugging Face GGUF catalog</h3>
+          <span class="chege-status-badge">Direct downloads</span>
+        </div>
+        <div class="card-body">
+          <p class="chege-model-help mb-2">One-click downloads of known-good GGUF files. Gated or private repositories can use an
+            optional Hugging Face token; it is sent only for that download and is never saved.</p>
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-md-8">
+              <label class="form-label" for="hf-token">Hugging Face token (optional)</label>
+              <input id="hf-token" class="form-control form-control-sm" type="password" autocomplete="off"
+                     placeholder="hf_…  only needed for gated/private repos">
+            </div>
+            <div class="col-md-4">
+              <span class="chege-setting-help d-block">Never written to <code>settings.json</code>.</span>
+            </div>
+          </div>
+          <div id="catalog-list" class="model-catalog-list"><div class="text-muted small">Loading catalog…</div></div>
+          <div class="chege-progress mt-3"><div class="chege-progress-bar" id="catalog-progress-bar"></div></div>
+          <div class="chege-progress-label" id="catalog-progress">Ready.</div>
+        </div>
+      </div>
+
       <div class="chege-settings-card mt-3">
         <div class="card-header">
           <h3 class="mb-0"><i class="fas fa-circle-info chege-section-icon"></i>How selection works</h3>
           <span class="chege-status-badge">Applies to new runs</span>
         </div>
         <div class="card-body">
-          <p class="mb-2">Your selection is saved immediately to <code>data/settings.json</code> and used for every new run — no extra save step needed.</p>
+          <p class="mb-2">Your selection is saved immediately to <code>data/settings.json</code>, makes that provider active,
+            and is used for every new run — no extra save step needed.</p>
           <ul class="mb-0 ps-3">
-            <li><b>llama.cpp:</b> choosing a model restarts <code>llama-server</code> on the host, then the new model is used immediately.</li>
-            <li><b>Ollama:</b> choosing a model tag is instant — Ollama switches per request.</li>
-            <li>You can still override the model per run in the Playground's <code>model</code> selector.</li>
-            <li>Other defaults (provider URLs, sandbox, context size) are managed in the <a href="/settings">Settings console</a>.</li>
+            <li><b><code>llama_cpp</code> (llama.cpp):</b> choosing a model restarts <code>llama-server</code> on the host via
+              <code>bash scripts/llamacpp.sh restart</code>, then the new model is used immediately. Host-server knobs
+              (<code>llamacpp_ctx</code>, <code>llamacpp_model</code>, host/port, <code>n_gpu_layers</code>) require that restart too.</li>
+            <li><b><code>ollama</code> (Ollama):</b> choosing a model tag is instant — Ollama switches per request and becomes
+              the default provider.</li>
+            <li><b><code>openai</code> (OpenAI-compatible):</b> base URL, model and max tokens are configured in the
+              Settings console; the API key is masked and never echoed back.</li>
+            <li>You can still override the provider and model per run in the Playground's selectors.</li>
+            <li>Per-runner configuration (URLs, model names, context sizes) lives in the
+              <a href="/settings">Settings console</a>: only the selected runner's settings are used. Other changes apply
+              to the next run (or immediately, where labelled); <code>Save as defaults</code> also persists them.</li>
           </ul>
+        </div>
+      </div>
+
+      <div class="chege-settings-card mt-3">
+        <div class="card-header">
+          <h3 class="mb-0"><i class="fas fa-ruler-combined chege-section-icon"></i>Context window vs n_ctx</h3>
+          <span class="chege-status-badge is-ok">Shipped in Phase 4C</span>
+        </div>
+        <div class="card-body">
+          <p class="mb-2">The <b>agent prompt budget</b> is <code>default_context_window</code> (default <b>8192</b>). It is passed
+            into the context builder: tool-schema tokens and a completion reserve are subtracted before history is added,
+            so prompts fit the server context. The full 20-tool schema set is about 1.9k tokens; reducing enabled tools on
+            the <a href="/tools">Tools page</a> lowers per-step schema tokens.</p>
+          <p class="mb-2">The <b>llama-server context</b> is its <code>n_ctx</code>, set by <code>CHEGE_LLAMACPP_CTX</code> /
+            <code>llamacpp_ctx</code> (default <b>8192</b>). These are separate knobs: changing the server one requires
+            <code>bash scripts/llamacpp.sh restart</code>. Other settings apply to the next run or immediately.</p>
+          <p class="mb-0">If a long thread still exceeds the prompt budget, start a new thread (or fork from a safe message)
+            to shorten the history.</p>
         </div>
       </div>
     </div></section>

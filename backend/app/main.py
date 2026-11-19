@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -104,6 +103,7 @@ def create_app() -> FastAPI:
             "/guide": "guide.html",
             "/setup": "setup.html",
             "/settings": "settings.html",
+            "/tools": "tools.html",
             "/models": "models.html",
             "/api": "api.html",
             "/security": "security.html",

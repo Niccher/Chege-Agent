@@ -30,8 +30,10 @@
       <p class="text-muted mb-0">One canonical version: <code>/api/v1/*</code>. No unversioned aliases.</p>
     </div></section>
     <section class="app-content"><div class="container-fluid">
-      <div class="callout callout-info">Interactive docs: <a href="/docs" target="_blank" rel="noopener">Swagger UI</a> ·
-        schema: <code>/api/v1/openapi.json</code> · health: <code>/healthz</code> and <code>/readyz</code>.</div>
+      <div class="callout callout-info">Canonical local base URL: <code>http://127.0.0.1:8001/api/v1</code> ·
+        interactive docs: <a href="/docs" target="_blank" rel="noopener">Swagger UI</a> ·
+        schema: <code>/api/v1/openapi.json</code> · health: <code>/healthz</code> and <code>/readyz</code> ·
+        tool governance UI: <a href="/tools">/tools</a>.</div>
 
       <div class="card"><div class="card-body p-0"><table class="table table-sm table-striped m-0">
         <thead><tr><th>Method</th><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
@@ -39,32 +41,38 @@
           <tr><td>GET / POST</td><td><code>/projects</code></td><td>200 / <b>201</b></td><td>List or create a project (create returns <code>Location</code>).</td></tr>
           <tr><td>GET</td><td><code>/projects/{slug}</code></td><td>200</td><td>Project details and brain.</td></tr>
           <tr><td>POST</td><td><code>/projects/{slug}/brain</code></td><td>200</td><td>Update goal, stack and notes.</td></tr>
+          <tr><td>DELETE</td><td><code>/projects/{slug}?confirm={slug}</code></td><td>200</td><td>Delete the project, its threads/runs and workspace directory. Rejected with <b>409</b> while a run is active.</td></tr>
           <tr><td>GET</td><td><code>/sessions/by-project/{slug}</code></td><td>200</td><td>Threads for a project.</td></tr>
           <tr><td>POST</td><td><code>/sessions</code></td><td><b>201</b></td><td>Create a thread.</td></tr>
           <tr><td>GET</td><td><code>/sessions/{id}</code></td><td>200</td><td>Session, messages and todos.</td></tr>
+          <tr><td>DELETE</td><td><code>/sessions/{id}?confirm={id}</code></td><td>200</td><td>Delete one thread and its messages/runs. The workspace is kept.</td></tr>
           <tr><td>POST</td><td><code>/sessions/{id}/fork</code></td><td><b>201</b></td><td>Fork a thread up to a message.</td></tr>
           <tr><td>POST</td><td><code>/runs</code></td><td><b>202</b></td><td>Start an async agent run; returns <code>run_id</code>.</td></tr>
           <tr><td>GET</td><td><code>/runs/{id}</code></td><td>200</td><td>Run metadata and tool calls.</td></tr>
           <tr><td>POST</td><td><code>/runs/{id}/approvals</code></td><td>200</td><td>Approve, reject or edit pending tool arguments.</td></tr>
           <tr><td>POST</td><td><code>/runs/{id}/cancel</code></td><td>200</td><td>Cancel an active run.</td></tr>
           <tr><td>POST</td><td><code>/runs/{id}/revert</code></td><td>200</td><td>Restore the automatic pre-run checkpoint.</td></tr>
-          <tr><td>GET</td><td><code>/runs/{id}/events?after=0</code></td><td>200</td><td>SSE stream with replay.</td></tr>
-          <tr><td>GET</td><td><code>/files?project_slug=…</code></td><td>200</td><td>Workspace file list.</td></tr>
+          <tr><td>GET</td><td><code>/runs/{id}/events?after=0</code></td><td>200</td><td>SSE stream with replay; honors the <code>Last-Event-ID</code> header on reconnect (and <code>?after=</code>).</td></tr>
+          <tr><td>GET</td><td><code>/files?project_slug=…</code></td><td>200</td><td>Flat workspace file list.</td></tr>
+          <tr><td>GET</td><td><code>/files/tree?project_slug=&amp;max_depth=8&amp;max_nodes=500</code></td><td>200</td><td>Nested tree view (directories, files, symlinks); <code>truncated</code> signals depth/node limits. The flat list, content and diff endpoints still work.</td></tr>
           <tr><td>GET</td><td><code>/files/content?project_slug=&amp;filepath=</code></td><td>200</td><td>File contents (text, ≤5 MB).</td></tr>
           <tr><td>GET</td><td><code>/files/diff?project_slug=…</code></td><td>200</td><td>Uncommitted Git diff.</td></tr>
           <tr><td>POST</td><td><code>/files/commit</code></td><td>200</td><td>Commit workspace changes.</td></tr>
           <tr><td>GET / PUT / POST</td><td><code>/providers…</code></td><td>200</td><td>List, activate and test LLM providers.</td></tr>
-          <tr><td>GET</td><td><code>/tools</code></td><td>200</td><td>Tool catalog with risk classes.</td></tr>
+          <tr><td>GET</td><td><code>/tools</code></td><td>200</td><td>All 20 tools with <code>name</code>, <code>description</code>, <code>purpose</code>, <code>risk</code>, <code>enabled</code>, <code>grant_mode</code>.</td></tr>
+          <tr><td>PATCH</td><td><code>/tools/{tool_name}</code></td><td>200</td><td>Update <code>enabled</code> and/or <code>grant_mode</code>; persisted in the <code>tool_settings</code> table. Unknown tool name → 400.</td></tr>
+          <tr><td>GET</td><td><code>/activity/tools?limit=80</code></td><td>200</td><td>Persistent tool-call history with timestamps, project/thread, action summary and result preview.</td></tr>
           <tr><td>GET / PATCH</td><td><code>/settings</code></td><td>200</td><td>Read (masked) or apply runtime-only settings. No <code>POST</code>.</td></tr>
-          <tr><td>PUT / DELETE</td><td><code>/settings/defaults</code></td><td>200</td><td>Save or clear persisted defaults in <code>data/settings.json</code>.</td></tr>
+          <tr><td>GET · PUT / DELETE</td><td><code>/settings</code> · <code>/settings/defaults</code></td><td>200</td><td>GET reads the masked current settings (including saved defaults); PUT applies changes and persists them to <code>data/settings.json</code> (atomic write, mode 0600) as "Save as defaults"; DELETE clears saved defaults (runtime values remain until restart).</td></tr>
           <tr><td>GET</td><td><code>/settings/models</code></td><td>200</td><td>List models for a provider.</td></tr>
-          <tr><td>GET</td><td><code>/models/overview</code></td><td>200</td><td>Installed llama.cpp / Ollama models and current selection.</td></tr>
+          <tr><td>GET</td><td><code>/models/overview</code></td><td>200</td><td>Installed llama.cpp / Ollama models, capability flags and current selection.</td></tr>
+          <tr><td>GET</td><td><code>/models/catalog</code></td><td>200</td><td>Curated Hugging Face GGUF catalog with direct URLs, sizes and capabilities.</td></tr>
           <tr><td>GET</td><td><code>/models/llamacpp</code></td><td>200</td><td>List local GGUF files (host control service).</td></tr>
-          <tr><td>POST</td><td><code>/models/llamacpp/download</code></td><td>200</td><td>Stream a GGUF download from a URL (SSE).</td></tr>
-          <tr><td>POST</td><td><code>/models/llamacpp/select</code></td><td>200</td><td>Restart llama-server with the chosen GGUF.</td></tr>
+          <tr><td>POST</td><td><code>/models/llamacpp/download</code></td><td>200</td><td>Stream a GGUF download from a URL (SSE). Optional <code>hf_token</code> for gated repositories.</td></tr>
+          <tr><td>POST</td><td><code>/models/llamacpp/select</code></td><td>200</td><td>Restart llama-server with the chosen GGUF and make llama.cpp the active provider.</td></tr>
           <tr><td>DELETE</td><td><code>/models/llamacpp/{name}</code></td><td>200</td><td>Delete an inactive GGUF file.</td></tr>
           <tr><td>GET / POST</td><td><code>/models/ollama</code>, <code>/models/ollama/pull</code></td><td>200</td><td>List or pull Ollama models (pull streams SSE).</td></tr>
-          <tr><td>POST</td><td><code>/models/ollama/select</code></td><td>200</td><td>Choose the Ollama tag used for new runs.</td></tr>
+          <tr><td>POST</td><td><code>/models/ollama/select</code></td><td>200</td><td>Choose the Ollama tag used for new runs and make Ollama the active provider.</td></tr>
         </tbody>
       </table></div>
       </div>
@@ -74,18 +82,78 @@
           <div class="card-body">
             <p><b>201 Created</b> and <b>202 Accepted</b> responses include a <code>Location</code> header.</p>
             <p>Errors are <code>{"detail": "..."}</code>: <b>409</b> for duplicates/invalid run state,
-              <b>403</b> for path escapes, <b>400</b> for bad input.</p>
-            <p class="mb-0">Lists return envelopes such as <code>{"projects": [...]}</code>; runs include
-              <code>{"run": …, "tool_calls": […]}</code>.</p>
+              <b>403</b> for path escapes, <b>400</b> for bad input (including an unknown tool name on
+              <code>PATCH /tools/{tool_name}</code>).</p>
+            <p class="mb-0">Lists return envelopes such as <code>{"projects": [...]}</code> and
+              <code>{"tools": [...]}</code>; runs include <code>{"run": …, "tool_calls": […]}</code>.</p>
           </div></div></div>
-        <div class="col-lg-6"><div class="card card-outline card-warning h-100"><div class="card-header"><h3 class="card-title">SSE example</h3></div>
+        <div class="col-lg-6"><div class="card card-outline card-warning h-100"><div class="card-header"><h3 class="card-title">SSE example (replay-safe)</h3></div>
           <div class="card-body"><pre class="doc-code mb-0"><code>const s = new EventSource(
   '/api/v1/runs/' + runId + '/events?after=0'
 );
+// EventSource reconnects with Last-Event-ID; the server replays
+// from that sequence (no lost or duplicated events).
+s.addEventListener('run.phase', e =&gt; {
+  const d = JSON.parse(e.data);
+  console.log(d.label, d.step + '/' + d.max_steps);
+});
 s.addEventListener('message.delta', e =&gt; {
   const d = JSON.parse(e.data);
   console.log(d.content, 'seq=', e.lastEventId);
 });</code></pre></div></div></div>
+      </div>
+
+      <div class="row mt-4">
+        <div class="col-lg-6"><div class="card card-outline card-primary h-100"><div class="card-header"><h3 class="card-title">GET /tools response shape</h3></div>
+          <div class="card-body"><pre class="doc-code mb-0"><code>GET /api/v1/tools
+{
+  "tools": [
+    {
+      "name": "tool_name",
+      "description": "Technical description sent to the model",
+      "purpose": "Plain-language purpose shown in the UI",
+      "risk": "read",
+      "enabled": true,
+      "grant_mode": "none"
+    }
+  ]
+}
+
+PATCH /api/v1/tools/{tool_name}
+{"enabled": false, "grant_mode": "prompt_once"}</code></pre>
+          <p class="text-muted small mt-2 mb-0"><code>risk</code> is one of <code>read</code>, <code>write</code>, <code>exec</code>,
+            <code>network</code>; <code>grant_mode</code> is <code>none</code> or <code>prompt_once</code>. All 20 tools default
+            to <code>enabled=true</code>, <code>grant_mode=none</code>.</p></div></div></div>
+        <div class="col-lg-6"><div class="card card-outline card-secondary h-100"><div class="card-header"><h3 class="card-title">Defaults and file-tree examples</h3></div>
+          <div class="card-body"><pre class="doc-code mb-0"><code>GET    /api/v1/settings           → masked current settings
+PUT    /api/v1/settings/defaults  → apply + persist to data/settings.json
+DELETE /api/v1/settings/defaults  → clear saved defaults
+
+GET /api/v1/files/tree?project_slug=js-calculator&amp;max_depth=8&amp;max_nodes=500
+{
+  "root": ".",
+  "nodes": [
+    {"name": "src", "path": "src", "type": "directory",
+     "children": [{"name": "app.js", "path": "src/app.js", "type": "file"}]}
+  ],
+  "truncated": false,
+  "node_count": 2
+}</code></pre>
+          <p class="text-muted small mt-2 mb-0"><code>directory</code> nodes have <code>children</code>; <code>symlink</code>
+            nodes are shown but never traversed. <code>max_depth</code> is 1–32 and <code>max_nodes</code> is 10–5000.</p></div></div></div>
+      </div>
+
+      <div class="row mt-4">
+        <div class="col-12"><div class="card card-outline card-info h-100"><div class="card-header"><h3 class="card-title">SSE event types</h3></div>
+          <div class="card-body">
+            <p class="small text-muted mb-2"><code>run.phase</code> payload: <code>{"phase", "label", "step", "max_steps"}</code>.
+              Labels are fixed and server-authored (e.g. "Preparing workspace", "Planning step N of M", "Waiting for the model",
+              "Reviewing the response") — never model-generated.</p>
+            <p class="small mb-0"><code>run.started</code>, <code>run.phase</code>, <code>message.delta</code>,
+              <code>thinking.delta</code>, <code>tool.started</code>, <code>tool.output</code>, <code>tool.completed</code>,
+              <code>tool.approval_required</code>, <code>tool.ask_user</code>, <code>todo.updated</code>,
+              <code>run.completed</code>, <code>run.failed</code>, <code>run.cancelled</code>.</p>
+          </div></div></div>
       </div>
     </div></section>
   </main>

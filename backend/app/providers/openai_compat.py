@@ -19,9 +19,15 @@ class OpenAICompatProvider(Provider):
     vLLM, llama.cpp server, and Groq (MDL-01).
     """
 
-    def __init__(self, base_url: str = "https://api.openai.com/v1", api_key: str | None = None):
+    def __init__(
+        self,
+        base_url: str = "https://api.openai.com/v1",
+        api_key: str | None = None,
+        timeout: float = 120.0,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or "none"
+        self.timeout = float(timeout or 120.0)
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -80,7 +86,7 @@ class OpenAICompatProvider(Provider):
         if tools:
             payload["tools"] = tools
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             async with client.stream(
                 "POST",
                 f"{self.base_url}/chat/completions",
@@ -111,6 +117,9 @@ class OpenAICompatProvider(Provider):
                         thinking_piece = delta.get("reasoning_content", "") or delta.get("thinking", "")
                         delta_tool_calls = delta.get("tool_calls", [])
                         finish_reason = choice.get("finish_reason")
+                        usage = chunk_obj.get("usage") or {}
+                        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                        completion_tokens = int(usage.get("completion_tokens") or 0)
 
                         # Accumulate streaming tool call deltas by index
                         if delta_tool_calls:
@@ -144,6 +153,8 @@ class OpenAICompatProvider(Provider):
                             delta_thinking=thinking_piece or "",
                             tool_calls=yielded_calls,
                             finish_reason=finish_reason,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
                         )
                     except Exception:
                         continue

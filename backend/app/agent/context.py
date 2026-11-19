@@ -77,6 +77,8 @@ class ContextBuilder:
             "- Proactively inspect existing files using list_files, read_file, or grep before modifying anything.",
             "- When editing files, prefer edit_file with precise context matching instead of overwriting whole files.",
             "- After modifying code, run tests or validation commands using run_command to verify changes.",
+            "- If the user asks you to create, edit, read, delete, compile, run or test files, call the corresponding tool. Do not describe a file write or shell command in prose and stop.",
+            "- Never present a tool invocation as a shell snippet, `write_file path ...` line, or code block. A response that only describes tool commands without calling a tool is incomplete.",
             "- In text protocol mode, invoke tools strictly using: <tool_call>{\"name\": \"tool_name\", \"arguments\": {...}}</tool_call>",
             "- Explanations should be direct and concise.",
         ])
@@ -90,15 +92,18 @@ class ContextBuilder:
         self,
         history: list[Message],
         system_prompt: str,
-        reserve_for_completion: int = 4096,
+        reserve_for_completion: int = 1024,
+        tool_tokens: int = 0,
     ) -> list[InternalMessage]:
+        """Assemble messages inside the budget, accounting for tools (CTX-01).
+
+        ``tool_tokens`` is the serialized size of the provider tool schemas.
+        They are attached to the request *after* history assembly, so they must
+        be subtracted here or the final request can exceed the server's n_ctx.
         """
-        Assemble messages while guaranteeing they fit within max_budget (CTX-01).
-        Replaces older tool results with concise stubs to save context.
-        """
-        budget_limit = self.max_budget - reserve_for_completion
+        budget_limit = self.max_budget - reserve_for_completion - tool_tokens
         system_tokens = estimate_tokens(system_prompt)
-        remaining_budget = max(1000, budget_limit - system_tokens)
+        remaining_budget = max(512, budget_limit - system_tokens)
 
         # Reverse iterate through history to include the most recent messages first
         selected: list[InternalMessage] = []

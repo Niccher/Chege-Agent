@@ -27,7 +27,7 @@ def list_workspace_files(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    work_dir = settings.workdir / project_slug
+    work_dir = settings.project_root(project_slug)
     try:
         target = resolve_in(work_dir, directory)
     except Exception as e:
@@ -47,6 +47,67 @@ def list_workspace_files(
     return {"files": sorted(files)}
 
 
+@router.get("/tree")
+def workspace_tree(
+    project_slug: str,
+    max_depth: int = Query(default=8, ge=1, le=32, description="Maximum folder depth to expand"),
+    max_nodes: int = Query(default=500, ge=10, le=5000, description="Maximum nodes to return"),
+    settings: Settings = Depends(get_settings),
+    db: Session = Depends(get_db_session),
+):
+    """Return a nested directory tree for the Linux `tree`-style file browser.
+
+    Symlinks are reported as nodes but never traversed, and every directory is
+    resolved before reading so a symlink cannot escape the project workspace.
+    """
+    project = db.exec(select(Project).where(Project.slug == project_slug)).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    work_dir = settings.project_root(project_slug)
+    if not work_dir.exists() or not work_dir.is_dir():
+        return {"root": ".", "nodes": [], "truncated": False, "node_count": 0}
+
+    state = {"count": 0, "truncated": False}
+
+    def children(directory: Path, depth: int) -> list[dict]:
+        if depth > max_depth:
+            state["truncated"] = True
+            return []
+        entries = []
+        try:
+            raw = list(directory.iterdir())
+        except OSError:
+            return []
+        for entry in raw:
+            if entry.name == ".git" or entry.name.startswith(".git/"):
+                continue
+            if state["count"] >= max_nodes:
+                state["truncated"] = True
+                break
+            rel = entry.relative_to(work_dir).as_posix()
+            if entry.is_symlink():
+                node = {"name": entry.name, "path": rel, "type": "symlink", "children": []}
+            elif entry.is_dir():
+                node = {"name": entry.name, "path": rel, "type": "directory", "children": children(entry, depth + 1)}
+            elif entry.is_file():
+                node = {"name": entry.name, "path": rel, "type": "file"}
+            else:
+                continue
+            state["count"] += 1
+            entries.append(node)
+        entries.sort(key=lambda node: (node["type"] != "directory", node["name"].lower()))
+        return entries
+
+    nodes = children(work_dir, 1)
+    return {
+        "root": ".",
+        "nodes": nodes,
+        "truncated": state["truncated"],
+        "node_count": state["count"],
+    }
+
+
 @router.get("/content")
 def get_file_content(
     project_slug: str,
@@ -58,7 +119,7 @@ def get_file_content(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    work_dir = settings.workdir / project_slug
+    work_dir = settings.project_root(project_slug)
     try:
         full_path = resolve_in(work_dir, filepath)
     except Exception as e:
@@ -91,7 +152,7 @@ def get_workspace_diff(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    work_dir = settings.workdir / project_slug
+    work_dir = settings.project_root(project_slug)
     # Non-destructive diff (TL-09)
     res = subprocess.run(["git", "diff", "HEAD"], cwd=work_dir, capture_output=True, text=True)
     return {"diff": res.stdout}
@@ -107,7 +168,7 @@ def commit_workspace(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    work_dir = settings.workdir / request.project_slug
+    work_dir = settings.project_root(request.project_slug)
     subprocess.run(["git", "add", "."], cwd=work_dir, capture_output=True)
     res = subprocess.run(["git", "commit", "-m", request.message], cwd=work_dir, capture_output=True, text=True)
     return {"status": "success", "output": res.stdout or res.stderr}
