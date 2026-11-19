@@ -6,7 +6,7 @@ from backend.app.db.database import get_db_session
 from backend.app.db.models import Message, Project, Session as DBSession
 from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/api/sessions", tags=["sessions"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/sessions", tags=["sessions"], dependencies=[Depends(verify_auth_token)])
 
 
 class CreateSessionRequest(BaseModel):

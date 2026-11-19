@@ -6,14 +6,16 @@ services:
     image: chege-agent:dev
     container_name: chege-agent-dev
     ports:
-      - "127.0.0.1:9100:9100"
+      - "127.0.0.1:8000:8000"
     environment:
       - CHEGE_HOST=0.0.0.0
-      - CHEGE_PORT=9100
+      - CHEGE_PORT=8000
       - CHEGE_DATA_DIR=/app/data
       - CHEGE_WORKDIR=/app/workdir
       - CHEGE_LOGS_DIR=/app/logs
       - CHEGE_SANDBOX_BACKEND=local
+      - CHEGE_DEFAULT_PROVIDER=llama_cpp
+      - CHEGE_LLAMACPP_URL=http://host.docker.internal:8080/v1
       - CHEGE_OLLAMA_URL=http://host.docker.internal:11434
     volumes:
       # Live development mounts with hot reload
@@ -22,7 +24,7 @@ services:
       - ./data:/app/data
       - ./workdir:/app/workdir
       - ./logs:/app/logs
-    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "9100", "--reload", "--reload-dir", "/app/backend", "--reload-dir", "/app/webui"]
+    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/backend", "--reload-dir", "/app/webui"]
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

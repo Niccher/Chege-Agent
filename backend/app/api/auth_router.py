@@ -4,7 +4,7 @@ import secrets
 from backend.app.core.config import Settings, get_settings
 from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):

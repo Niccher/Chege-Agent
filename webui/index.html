@@ -242,27 +242,54 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title">⚙️ Agent & Ollama Settings</h5>
+                <h5 class="modal-title">⚙️ LLM Provider & Agent Settings</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
                 
-                <!-- Section 1: Host config -->
+                <!-- Section 1: Provider Selection -->
                 <div class="mb-4">
-                    <label class="form-label fw-bold">1. Ollama Host Connection</label>
-                    <div class="input-group">
-                        <input type="text" class="form-control font-monospace"
-                               id="ollamaUrl"
-                               placeholder="e.g. http://172.17.0.1:11434">
-                        <button class="btn btn-outline-secondary" type="button" id="detectHostBtn">
-                            <span id="detectSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
-                            🔍 Detect Host
-                        </button>
-                        <button class="btn btn-outline-dark" type="button" id="testConnectionBtn">
-                            <span id="testSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
-                            🔌 Test
-                        </button>
+                    <label class="form-label fw-bold">1. Active Inference Engine</label>
+                    <div class="d-flex gap-3 mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="providerRadio" id="providerLlamaCpp" value="llama_cpp" checked>
+                            <label class="form-check-label fw-semibold" for="providerLlamaCpp">
+                                🦙 llama.cpp Server (Default & Recommended)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="providerRadio" id="providerOllama" value="ollama">
+                            <label class="form-check-label fw-semibold" for="providerOllama">
+                                🦙 Ollama Daemon
+                            </label>
+                        </div>
                     </div>
+
+                    <!-- llama.cpp config box -->
+                    <div id="llamacppConfigBox" class="p-3 border rounded mb-3 bg-light">
+                        <label class="form-label small text-muted fw-bold">llama.cpp Server URL (Standard Port 8080)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace" id="llamacppUrl" placeholder="http://host.docker.internal:8080/v1">
+                            <button class="btn btn-outline-dark" type="button" id="testLlamaCppBtn">
+                                <span id="testLlamaCppSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                                🔌 Test llama.cpp
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mt-1">Run: <code>llama-server -m model.gguf --port 8080 --host 0.0.0.0 -c 16384</code></small>
+                    </div>
+
+                    <!-- Ollama config box -->
+                    <div id="ollamaConfigBox" class="p-3 border rounded mb-3 bg-light">
+                        <label class="form-label small text-muted fw-bold">Ollama Host URL (Standard Port 11434)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace" id="ollamaUrl" placeholder="http://host.docker.internal:11434">
+                            <button class="btn btn-outline-dark" type="button" id="testConnectionBtn">
+                                <span id="testSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                                🔌 Test Ollama
+                            </button>
+                        </div>
+                    </div>
+
                     <div id="testResult" class="alert d-none mt-2 mb-0 py-2" role="alert"></div>
                 </div>
 
@@ -719,14 +746,36 @@
                     select.append(`<option value="${model}">${model} (${badge})</option>`);
                 });
             }
+    function loadModels() {
+        const select = $('#modelSelect');
+        select.html('<option value="">⏳ Fetching available models...</option>');
+        $.get(`${API_BASE}/api/v1/providers`, function(provData) {
+            const active = provData.active_provider || 'llama_cpp';
+            $(`input[name="providerRadio"][value="${active}"]`).prop('checked', true);
+            $.get(`${API_BASE}/api/v1/settings/models?provider=${active}`, function(data) {
+                select.empty();
+                if (!data.models || data.models.length === 0) {
+                    select.html('<option value="default">llama.cpp Loaded Model (default)</option>');
+                } else {
+                    data.models.forEach(m => {
+                        const mId = m.id || m.name;
+                        select.append(`<option value="${mId}">${m.name || mId} [${m.provider}]</option>`);
+                    });
+                }
+            }).fail(function() {
+                select.html('<option value="default">llama.cpp Loaded Model (Check Settings)</option>');
+            });
         }).fail(function() {
-            select.html('<option value="">Error connecting to Ollama (Check Settings)</option>');
+            select.html('<option value="default">llama.cpp Loaded Model (Default)</option>');
         });
     }
 
     $(document).ready(function() {
-        $.get(`${API_BASE}/config`, function(data) {
+        $.get(`${API_BASE}/api/v1/settings`, function(data) {
+            $('#llamacppUrl').val(data.llamacpp_url || 'http://host.docker.internal:8080/v1');
             $('#ollamaUrl').val(data.ollama_url || 'http://host.docker.internal:11434');
+            const prov = data.default_provider || 'llama_cpp';
+            $(`input[name="providerRadio"][value="${prov}"]`).prop('checked', true);
             loadModels();
         }).fail(function() {
             loadModels();
@@ -737,42 +786,66 @@
             new bootstrap.Modal(document.getElementById('settingsModal')).show();
         });
 
-        $('#detectHostBtn').click(function() {
-            $('#detectSpinner').removeClass('d-none');
-            $('#detectHostBtn').prop('disabled', true);
-            $.get(`${API_BASE}/config/detect-host`, function(data) {
-                if (data.status === 'ok') {
-                    $('#ollamaUrl').val(data.suggested_url);
-                    $('#testResult').removeClass('d-none alert-danger alert-warning').addClass('alert-info').html(`🔍 Detected host IP: <strong>${data.ip}</strong>`);
-                } else {
-                    $('#testResult').removeClass('d-none alert-success alert-info').addClass('alert-warning').text(`⚠️ Auto-detect failed: ${data.message}`);
+        $('#testLlamaCppBtn').click(function() {
+            const url = $('#llamacppUrl').val().trim();
+            $('#testLlamaCppSpinner').removeClass('d-none');
+            $.ajax({
+                url: `${API_BASE}/api/v1/providers/test`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ provider: 'llama_cpp', url: url }),
+                success: function(data) {
+                    const isOk = data.status === 'ok';
+                    $('#testResult').removeClass('d-none alert-success alert-danger alert-warning')
+                        .addClass(isOk ? 'alert-success' : 'alert-danger')
+                        .text(isOk ? `✅ Connected to llama.cpp server! (${data.url || url})` : `❌ ${data.message || 'Connection failed'}`);
+                },
+                error: function() {
+                    $('#testResult').removeClass('d-none alert-success alert-warning').addClass('alert-danger').text('❌ Could not reach Chege Agent backend.');
+                },
+                complete: function() {
+                    $('#testLlamaCppSpinner').addClass('d-none');
                 }
-            }).fail(function() {
-                $('#testResult').removeClass('d-none alert-success alert-info').addClass('alert-danger').text('❌ Could not reach backend.');
-            }).always(function() {
-                $('#detectSpinner').addClass('d-none');
-                $('#detectHostBtn').prop('disabled', false);
             });
         });
 
         $('#testConnectionBtn').click(function() {
             const url = $('#ollamaUrl').val().trim();
             $('#testSpinner').removeClass('d-none');
-            $.get(`${API_BASE}/config/test?url=${encodeURIComponent(url)}`, function(data) {
-                const isOk = data.status === 'ok';
-                $('#testResult').removeClass('d-none alert-success alert-danger alert-warning').addClass(isOk ? 'alert-success' : 'alert-danger').text(data.message);
-            }).fail(() => $('#testResult').removeClass('d-none').addClass('alert-danger').text('❌ Backend unreachable.')).always(() => {
-                $('#testSpinner').addClass('d-none');
+            $.ajax({
+                url: `${API_BASE}/api/v1/providers/test`,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ provider: 'ollama', url: url }),
+                success: function(data) {
+                    const isOk = data.status === 'ok';
+                    $('#testResult').removeClass('d-none alert-success alert-danger alert-warning')
+                        .addClass(isOk ? 'alert-success' : 'alert-danger')
+                        .text(isOk ? `✅ Connected to Ollama! Found ${data.models_count || 0} model(s).` : `❌ ${data.message || 'Connection failed'}`);
+                },
+                error: function() {
+                    $('#testResult').removeClass('d-none alert-success alert-warning').addClass('alert-danger').text('❌ Backend unreachable.');
+                },
+                complete: function() {
+                    $('#testSpinner').addClass('d-none');
+                }
             });
         });
 
         $('#saveSettingsBtn').click(function() {
-            const newUrl = $('#ollamaUrl').val().trim();
+            const selectedProv = $('input[name="providerRadio"]:checked').val() || 'llama_cpp';
+            const llamacppUrl = $('#llamacppUrl').val().trim();
+            const ollamaUrl = $('#ollamaUrl').val().trim();
+
             $.ajax({
-                url: `${API_BASE}/config`,
-                type: 'POST',
+                url: `${API_BASE}/api/v1/settings`,
+                type: 'PATCH',
                 contentType: 'application/json',
-                data: JSON.stringify({ ollama_url: newUrl }),
+                data: JSON.stringify({
+                    default_provider: selectedProv,
+                    llamacpp_url: llamacppUrl,
+                    ollama_url: ollamaUrl,
+                }),
                 success: function() {
                     bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
                     loadModels();

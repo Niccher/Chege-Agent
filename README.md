@@ -11,20 +11,26 @@ Software engineers & maintainers: [docs/README.md](docs/README.md).
 
 | Component | URL / Endpoint | Purpose |
 |---|---|---|
-| **Web UI** | [http://127.0.0.1:9100](http://127.0.0.1:9100) | Interactive pair-programming chat & workspace |
-| **API Docs (Swagger)** | [http://127.0.0.1:9100/docs](http://127.0.0.1:9100/docs) | Interactive OpenAPI exploration |
-| **Health Check** | `GET http://127.0.0.1:9100/healthz` | Container readiness and liveness probe |
+| **Web UI** | [http://127.0.0.1:8000](http://127.0.0.1:8000) | Interactive pair-programming chat & workspace |
+| **API Docs (Swagger)** | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) | Interactive OpenAPI v1 exploration (`/api/v1`) |
+| **Health Check** | `GET http://127.0.0.1:8000/healthz` | Container readiness and liveness probe |
 
 ---
 
 ## Prerequisites
 
 - **Docker Engine 24+** & **Docker Compose v2** (Recommended)
-- **[Ollama](https://ollama.com/)** running on your host machine (default port `11434`), or an OpenAI-compatible API key.
-- A pulled coding model in Ollama:
-  ```bash
-  ollama pull qwen2.5-coder:latest
-  ```
+- **Local LLM Engine** (Either option supported):
+  - **Option A: [llama.cpp](https://github.com/ggerganov/llama.cpp) (Default & Recommended)** running on host (default port `8080`):
+    ```bash
+    llama-server -m /path/to/qwen2.5-coder-7b-instruct.Q4_K_M.gguf --port 8080 --host 0.0.0.0 -c 16384
+    ```
+  - **Option B: [Ollama](https://ollama.com/)** running on host (default port `11434`):
+    ```bash
+    OLLAMA_HOST=0.0.0.0:11434 ollama serve
+    ollama pull qwen2.5-coder:latest
+    ```
+  - *(Optional)* OpenAI / OpenRouter API key.
 
 ---
 
@@ -46,14 +52,14 @@ cp .env.example .env  # or edit docker-compose.yml environment variables
 ```bash
 docker compose up --build -d
 ```
-*This starts the `chege-docker-proxy` (sandboxed Docker socket proxy) and the `chege-agent` container.*
+*This starts the `chege-docker-proxy` (sandboxed Docker socket proxy) and the `chege-agent` container on port 8000.*
 
 ### 4. Verify Health & Open UI
 Confirm the container is running and healthy:
 ```bash
-curl -f http://127.0.0.1:9100/healthz
+curl -f http://127.0.0.1:8000/healthz
 ```
-Open [http://127.0.0.1:9100](http://127.0.0.1:9100) in your web browser.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your web browser.
 
 ### 5. Stop the Stack
 ```bash
@@ -68,8 +74,9 @@ Key environment variables configurable in `.env` or `docker-compose.yml`:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CHEGE_PORT` | `9100` | Host port mapped to the Chege Agent service |
-| `CHEGE_DEFAULT_PROVIDER` | `ollama` | Primary LLM provider (`ollama` or `openai`) |
+| `CHEGE_PORT` | `8000` | Host port mapped to the Chege Agent service (standard ASGI port) |
+| `CHEGE_DEFAULT_PROVIDER` | `llama_cpp` | Primary LLM provider (`llama_cpp`, `ollama`, or `openai`) |
+| `CHEGE_LLAMACPP_URL` | `http://host.docker.internal:8080/v1` | llama-server OpenAI-compatible API endpoint |
 | `CHEGE_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama API endpoint reachable from containers |
 | `CHEGE_OPENAI_API_KEY` | *(empty)* | API key when using OpenAI or compatible providers |
 | `CHEGE_SANDBOX_BACKEND` | `docker` | Workspace isolation mode (`docker` or `local`) |
@@ -83,8 +90,9 @@ Key environment variables configurable in `.env` or `docker-compose.yml`:
 
 | Symptom | Cause | Solution |
 |---|---|---|
+| **Cannot reach llama.cpp server** | Server not started or bound strictly to loopback | Run `llama-server ... --host 0.0.0.0 --port 8080` so Docker containers can reach it. |
 | **Cannot reach Ollama** | Host firewall or Ollama binding | Run `OLLAMA_HOST=0.0.0.0:11434 ollama serve` on the host machine. |
-| **Port 9100 already in use** | Conflicting local process | Change `CHEGE_PORT` in `.env` or edit the port mapping in `docker-compose.yml`. |
+| **Port 8000 already in use** | Conflicting local process | Change `CHEGE_PORT` in `.env` or edit the port mapping in `docker-compose.yml`. |
 | **Docker proxy permission denied** | Docker socket access | Ensure `/var/run/docker.sock` has read permissions for the Docker daemon. |
 | **Container unhealthy** | Service startup delay | Check logs using `docker compose logs -f chege-agent`. |
 

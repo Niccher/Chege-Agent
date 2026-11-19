@@ -1,12 +1,12 @@
 # REST API & Event Contract Reference
 
-All endpoints are hosted at `http://127.0.0.1:9100`. Interactive Swagger UI is available at `/docs`.
+All endpoints are hosted at `http://127.0.0.1:8000`. Canonical versioned routes are located at `/api/v1/*` (with `/api/*` supported as backward-compatible aliases). Interactive Swagger UI is available at `/docs`, and the OpenAPI v1 schema is accessible at `/api/v1/openapi.json`.
 
 ---
 
-## 1. Authentication Endpoints (`/api/auth`)
+## 1. Authentication Endpoints (`/api/v1/auth`)
 
-### `POST /api/auth/login`
+### `POST /api/v1/auth/login`
 Authenticates an operator and sets an `HttpOnly` session cookie (`chege_token`).
 - **Request Body**:
   ```json
@@ -21,7 +21,7 @@ Authenticates an operator and sets an `HttpOnly` session cookie (`chege_token`).
   }
   ```
 
-### `GET /api/auth/status`
+### `GET /api/v1/auth/status`
 Verifies whether the current request is authenticated.
 - **Headers**: `Authorization: Bearer <token>` or `X-Chege-Token: <token>`
 - **Response** (200 OK):
@@ -34,10 +34,95 @@ Verifies whether the current request is authenticated.
 
 ---
 
-## 2. Projects Endpoints (`/api/projects`)
+## 2. Projects Endpoints (`/api/v1/projects`)
 
-### `GET /api/projects`
+### `GET /api/v1/projects`
 List all active projects.
+
+---
+
+## 3. Providers Endpoints (`/api/v1/providers`)
+
+### `GET /api/v1/providers`
+List available LLM inference backends, their target URLs, default ports, and active provider (`llama_cpp` vs `ollama`).
+
+### `PUT /api/v1/providers/active`
+Switches the system's active default provider at runtime without container restart:
+```json
+{
+  "provider": "llama_cpp"
+}
+```
+
+### `POST /api/v1/providers/test`
+Validates connectivity to a given provider endpoint:
+```json
+{
+  "provider": "llama_cpp",
+  "url": "http://host.docker.internal:8080/v1"
+}
+```
+
+### `GET /api/v1/providers/{provider_name}/models`
+Discovers models currently loaded or available on the specified provider.
+
+---
+
+## 4. Sessions Endpoints (`/api/v1/sessions`)
+
+---
+
+## 5. Runs Endpoints (`/api/v1/runs`)
+
+### `POST /api/v1/runs`
+Launches an asynchronous agent execution run (HTTP 202 Accepted).
+```json
+{
+  "session_id": "session-uuid",
+  "prompt": "Build a REST API",
+  "model": "qwen2.5-coder:latest",
+  "provider": "llama_cpp"
+}
+```
+
+### `GET /api/v1/runs/{run_id}`
+Retrieves run metadata and associated tool call history.
+
+### `POST /api/v1/runs/{run_id}/approvals`
+Submits user approval decisions for paused actions.
+
+### `POST /api/v1/runs/{run_id}/cancel`
+Aborts an in-progress agent run.
+
+---
+
+## 6. Real-Time Events (`/api/v1/runs/{run_id}/events`)
+
+### `GET /api/v1/runs/{run_id}/events`
+Server-Sent Events (SSE) stream.
+- **Query Parameters**:
+  - `after` (optional, default `0`): Replay events strictly after this sequence number for reconnection catchup.
+- **Media Type**: `text/event-stream`
+
+---
+
+## 7. Files Endpoints (`/api/v1/files/{project_slug}`)
+
+### `GET /api/v1/files/{project_slug}`
+Returns the hierarchical directory tree and file metadata of the workspace.
+
+### `GET /api/v1/files/{project_slug}/content?path=src/main.py`
+Retrieves line-numbered content of a specific file inside the workspace.
+
+---
+
+## 8. Health & Settings Endpoints
+
+- `GET /healthz`: Service liveness check (`{"status": "ok", "version": "0.2.0"}`).
+- `GET /readyz`: Service readiness probe (`{"status": "ready"}`).
+- `GET /api/v1/settings`: Returns current runtime configurations and provider availability.
+- `PATCH /api/v1/settings`: Partial update for runtime settings (`llamacpp_url`, `ollama_url`, `default_provider`).
+
 - **Response** (200 OK):
   ```json
   [

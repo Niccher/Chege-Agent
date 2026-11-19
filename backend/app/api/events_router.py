@@ -6,7 +6,7 @@ from backend.app.db.database import create_session
 from backend.app.events.manager import EventManager, get_event_manager
 from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/api/runs", tags=["events"])
+router = APIRouter(prefix="/runs", tags=["events"])
 
 
 @router.get("/{run_id}/events")
@@ -23,10 +23,16 @@ async def stream_run_events(
     """
     async def event_generator():
         # 1. Catchup: replay historical events if requested
+        has_terminal = False
         with create_session() as db:
             past_events = event_mgr.get_events_after(db, run_id, after_seq=after)
             for evt in past_events:
                 yield f"id: {evt.seq}\nevent: {evt.event_type}\ndata: {evt.payload_json}\n\n"
+                if evt.event_type in ("run.completed", "run.failed", "run.cancelled"):
+                    has_terminal = True
+
+        if has_terminal:
+            return
 
         # 2. Subscribe to live events
         queue = event_mgr.subscribe(run_id)

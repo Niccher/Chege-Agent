@@ -12,7 +12,9 @@ from backend.app.sandbox.docker import DockerSandbox
 from backend.app.sandbox.local import LocalSandbox
 from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/api/runs", tags=["runs"], dependencies=[Depends(verify_auth_token)])
+from backend.app.providers.factory import get_provider
+
+router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[Depends(verify_auth_token)])
 
 _run_manager = None
 
@@ -20,10 +22,7 @@ _run_manager = None
 def get_run_manager(settings: Settings = Depends(get_settings)) -> RunManager:
     global _run_manager
     if _run_manager is None:
-        if settings.default_provider == "openai" and settings.openai_api_key:
-            provider = OpenAICompatProvider(base_url=settings.openai_base_url, api_key=settings.openai_api_key)
-        else:
-            provider = OllamaProvider(base_url=settings.ollama_url)
+        provider = get_provider(settings=settings)
 
         def sandbox_factory(workspace_root, slug):
             if settings.sandbox_backend == "docker":
@@ -38,6 +37,7 @@ class StartRunRequest(BaseModel):
     session_id: str
     prompt: str = Field(description="User prompt / instruction")
     model: str = Field(default="qwen2.5-coder:latest")
+    provider: str | None = Field(default=None, description="Optional provider override ('llama_cpp' or 'ollama')")
     policy_mode: str = Field(default="auto_edit", description="ask_all | auto_edit | full_auto")
     max_steps: int = Field(default=50)
 
@@ -80,6 +80,7 @@ async def start_run(
         model_name=request.model,
         max_steps=request.max_steps,
         policy_mode=request.policy_mode,
+        provider_name=request.provider,
     )
 
     return {"run_id": run_id, "status": "started"}

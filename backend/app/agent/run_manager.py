@@ -61,8 +61,9 @@ class RunManager:
         model_name: str,
         max_steps: int = 50,
         policy_mode: str = "auto_edit",
+        provider_name: str | None = None,
     ) -> None:
-        """Launch background run task."""
+        """Launch background run task with optional provider override (MDL-01)."""
         cancel_evt = asyncio.Event()
         self._cancel_events[run_id] = cancel_evt
 
@@ -75,6 +76,7 @@ class RunManager:
                 max_steps=max_steps,
                 policy_mode=policy_mode,
                 cancel_evt=cancel_evt,
+                provider_name=provider_name,
             )
         )
         self._active_tasks[run_id] = task
@@ -105,7 +107,10 @@ class RunManager:
         max_steps: int,
         policy_mode: str,
         cancel_evt: asyncio.Event,
+        provider_name: str | None = None,
     ) -> None:
+        from backend.app.providers.factory import get_provider
+        active_provider = get_provider(provider_name) if provider_name else self.provider
         engine = get_db_engine()
         loop_guard = LoopGuard()
 
@@ -187,7 +192,7 @@ class RunManager:
                     streamed_tool_calls = []
 
                     try:
-                        async for chunk in self.provider.stream_chat(
+                        async for chunk in active_provider.stream_chat(
                             model=model_name,
                             messages=assembled,
                             tools=tool_schemas,

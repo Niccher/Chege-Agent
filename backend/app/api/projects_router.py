@@ -7,7 +7,7 @@ from backend.app.db.models import Project, Session as DBSession
 from backend.app.security.auth import verify_auth_token
 from backend.app.security.paths import sanitize_project_name
 
-router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/projects", tags=["projects"], dependencies=[Depends(verify_auth_token)])
 
 
 class CreateProjectRequest(BaseModel):

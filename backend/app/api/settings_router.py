@@ -2,14 +2,15 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from backend.app.core.config import Settings, get_settings
-from backend.app.providers.ollama import OllamaProvider
-from backend.app.providers.openai_compat import OpenAICompatProvider
+from backend.app.providers.factory import get_provider
+from backend.app.providers.llama_cpp import LlamaCppProvider
 from backend.app.security.auth import verify_auth_token
 
-router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/settings", tags=["settings"], dependencies=[Depends(verify_auth_token)])
 
 
 class UpdateSettingsRequest(BaseModel):
+    llamacpp_url: str | None = None
     ollama_url: str | None = None
     default_provider: str | None = None
     openai_base_url: str | None = None
@@ -23,7 +24,10 @@ def read_settings(settings: Settings = Depends(get_settings)):
 
 
 @router.post("")
+@router.patch("")
 def update_settings(request: UpdateSettingsRequest, settings: Settings = Depends(get_settings)):
+    if request.llamacpp_url is not None:
+        settings.llamacpp_url = request.llamacpp_url
     if request.ollama_url is not None:
         settings.ollama_url = request.ollama_url
     if request.default_provider is not None:
@@ -39,14 +43,19 @@ def update_settings(request: UpdateSettingsRequest, settings: Settings = Depends
 
 
 @router.get("/models")
-async def list_available_models(settings: Settings = Depends(get_settings)):
-    if settings.default_provider == "openai" and settings.openai_api_key:
-        provider = OpenAICompatProvider(base_url=settings.openai_base_url, api_key=settings.openai_api_key)
-    else:
-        provider = OllamaProvider(base_url=settings.ollama_url)
-
-    models = await provider.list_models()
+async def list_available_models(
+    provider: str | None = None, settings: Settings = Depends(get_settings)
+):
+    active_prov = get_provider(provider_name=provider, settings=settings)
+    models = await active_prov.list_models()
     return {"models": models}
+
+
+@router.get("/test-llamacpp")
+async def test_llamacpp(url: str | None = None, settings: Settings = Depends(get_settings)):
+    raw_url = (url or settings.llamacpp_url).strip()
+    provider = LlamaCppProvider(base_url=raw_url)
+    return await provider.check_health()
 
 
 @router.get("/test-ollama")

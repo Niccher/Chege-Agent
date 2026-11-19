@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Server Network Binding (SEC-03: default 127.0.0.1 instead of 0.0.0.0)
     host: str = "127.0.0.1"
-    port: int = 9100
+    port: int = 8000
 
     # Base Directories
     base_dir: Path = Field(default_factory=lambda: Path(__file__).resolve().parent.parent.parent.parent)
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
         "http://localhost:9100",
         "http://127.0.0.1:9100",
     ]
@@ -39,7 +41,8 @@ class Settings(BaseSettings):
     default_sandbox_image: str = "chege-sandbox-polyglot:latest"
 
     # Default LLM Provider (MDL-01)
-    default_provider: Literal["ollama", "openai"] = "ollama"
+    default_provider: Literal["llama_cpp", "ollama", "openai"] = "llama_cpp"
+    llamacpp_url: str = "http://host.docker.internal:8080/v1"
     ollama_url: str = "http://host.docker.internal:11434"
     openai_base_url: str = "https://api.openai.com/v1"
     openai_api_key: str | None = None

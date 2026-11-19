@@ -25,12 +25,12 @@ RUN useradd -u 10001 -m -s /bin/bash chege && \
 
 USER chege
 
-# Expose API port
-EXPOSE 9100
+# Expose API port (Standard ASGI/FastAPI port)
+EXPOSE 8000
 
 # Healthcheck probe (ENG-07)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://127.0.0.1:9100/healthz || exit 1
+    CMD curl -f http://127.0.0.1:8000/healthz || exit 1
 
 # Production startup command (without insecure --reload)
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "9100"]
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

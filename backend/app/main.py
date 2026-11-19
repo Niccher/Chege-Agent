@@ -5,13 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.api.auth_router import router as auth_router
-from backend.app.api.events_router import router as events_router
-from backend.app.api.files_router import router as files_router
-from backend.app.api.projects_router import router as projects_router
-from backend.app.api.runs_router import router as runs_router
-from backend.app.api.sessions_router import router as sessions_router
-from backend.app.api.settings_router import router as settings_router
+from backend.app.api.v1 import api_v1_router, legacy_api_router
 from backend.app.core.config import get_settings
 from backend.app.core.logging import configure_logging, get_logger
 from backend.app.db.database import init_db
@@ -37,6 +31,9 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Chege Agent API",
         version="0.2.0",
+        openapi_url="/api/v1/openapi.json",
+        docs_url="/docs",
+        redoc_url="/redoc",
         lifespan=lifespan,
     )
 
@@ -45,7 +42,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -75,14 +72,9 @@ def create_app() -> FastAPI:
     def readyz():
         return {"status": "ready"}
 
-    # Include API Routers
-    app.include_router(auth_router)
-    app.include_router(projects_router)
-    app.include_router(sessions_router)
-    app.include_router(runs_router)
-    app.include_router(events_router)
-    app.include_router(files_router)
-    app.include_router(settings_router)
+    # Include Versioned REST API Router and Legacy Compatibility Router
+    app.include_router(api_v1_router)
+    app.include_router(legacy_api_router)
 
     # Static assets and UI fallback
     frontend_dist = settings.base_dir / "frontend" / "dist"

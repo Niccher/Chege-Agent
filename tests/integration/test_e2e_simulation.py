@@ -198,7 +198,7 @@ def test_full_lifecycle_end_to_end(tmp_path: Path, monkeypatch):
         assert events_resp.status_code == 200
         events_text = events_resp.text
         assert "event: run.started" in events_text
-        assert "event: tool.proposed" in events_text
+        assert "event: tool.started" in events_text
         assert "event: run.completed" in events_text
 
         # 6. Check files API

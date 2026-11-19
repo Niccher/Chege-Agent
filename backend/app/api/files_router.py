@@ -9,7 +9,7 @@ from backend.app.db.models import Project
 from backend.app.security.auth import verify_auth_token
 from backend.app.security.paths import resolve_in
 
-router = APIRouter(prefix="/api/files", tags=["files"], dependencies=[Depends(verify_auth_token)])
+router = APIRouter(prefix="/files", tags=["files"], dependencies=[Depends(verify_auth_token)])
 
 
 class CommitRequest(BaseModel):

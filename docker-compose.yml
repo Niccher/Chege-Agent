@@ -24,16 +24,18 @@ services:
     image: chege-agent:0.2.0
     container_name: chege-agent
     ports:
-      # Bind to localhost by default (SEC-03)
-      - "127.0.0.1:9100:9100"
+      # Bind to localhost on standard port 8000 (SEC-03)
+      - "127.0.0.1:8000:8000"
     environment:
       - CHEGE_HOST=0.0.0.0
-      - CHEGE_PORT=9100
+      - CHEGE_PORT=8000
       - CHEGE_DATA_DIR=/app/data
       - CHEGE_WORKDIR=/app/workdir
       - CHEGE_LOGS_DIR=/app/logs
       - CHEGE_SANDBOX_BACKEND=docker
       - CHEGE_DOCKER_SOCKET_PROXY=tcp://docker-socket-proxy:2375
+      - CHEGE_DEFAULT_PROVIDER=llama_cpp
+      - CHEGE_LLAMACPP_URL=http://host.docker.internal:8080/v1
       - CHEGE_OLLAMA_URL=http://host.docker.internal:11434
     volumes:
       # Persistent application data and workspace directories
