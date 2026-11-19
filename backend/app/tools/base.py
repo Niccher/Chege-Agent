@@ -46,6 +46,30 @@ class BaseTool:
     async def run(self, ctx: ToolContext, args: BaseModel) -> ToolResult:
         raise NotImplementedError
 
+    @staticmethod
+    def _inline_refs(node, defs: dict):
+        """Resolve local Pydantic $refs so providers see self-contained schemas.
+
+        Pydantic emits nested models under ``$defs`` and references them with
+        ``#/$defs/<Name>``. We only forward ``properties``/``required`` to the
+        provider, so those refs would dangle. llama.cpp's JSON-schema grammar
+        generator rejects them with "$defs not found".
+        """
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                target = defs.get(ref[len("#/$defs/"):])
+                if target is not None:
+                    return BaseTool._inline_refs(target, defs)
+            return {
+                key: BaseTool._inline_refs(value, defs)
+                for key, value in node.items()
+                if key != "$defs"
+            }
+        if isinstance(node, list):
+            return [BaseTool._inline_refs(item, defs) for item in node]
+        return node
+
     def get_schema(self) -> dict:
         """Generate provider-compatible function calling JSON schema (TL-11)."""
         if self.args_model is BaseModel or self.args_model is EmptyInput:
@@ -53,7 +77,7 @@ class BaseTool:
             required = []
         else:
             schema = self.args_model.model_json_schema()
-            properties = schema.get("properties", {})
+            properties = self._inline_refs(schema.get("properties", {}), schema.get("$defs", {}))
             required = schema.get("required", [])
 
         return {

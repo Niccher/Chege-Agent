@@ -225,9 +225,21 @@ sync_env() {
     fi
 }
 
+fix_runtime_ownership() {
+    # Bind mounts keep their host ownership, while the app runs as UID 10001.
+    # Pre-existing DB/workspace files would otherwise be read-only in the
+    # container (SQLite then fails with "attempt to write a readonly database").
+    # Run as root in a short-lived container so no host sudo is required.
+    docker run --rm --user root -v "$PWD:/work" -w /work \
+        --entrypoint chown python:3.12-slim \
+        -R 10001:10001 /work/data /work/workdir /work/logs \
+        || err "Could not fix ownership of data/, workdir/ and logs/."
+}
+
 prepare() {
     section "3. Preparing directories and compose files"
     mkdir -p data workdir logs
+    fix_runtime_ownership
     if [ "$WITH_POSTGRES" = true ] && [ ! -f docker-compose.postgres.yml ]; then
         err "docker-compose.postgres.yml is missing."
     fi
