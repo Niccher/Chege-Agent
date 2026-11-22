@@ -1,3 +1,4 @@
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -5,12 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.provider_catalog import (
+    get_provider_entry,
+    mask_secret,
+    provider_ids,
+)
 from backend.app.providers.factory import get_provider
 from backend.app.providers.llama_cpp import LlamaCppProvider
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-PROVIDERS = {"llama_cpp", "ollama", "openai"}
+PROVIDERS = provider_ids()
 SANDBOX_BACKENDS = {"docker", "local"}
 POSITIVE_INTS = {
     "default_context_window": 1024,
@@ -33,6 +39,9 @@ class UpdateSettingsRequest(BaseModel):
     default_provider: str | None = None
     openai_base_url: str | None = None
     openai_api_key: str | None = None
+    # Per-provider cloud credentials keyed by catalog id. Only the keys sent
+    # are changed; a masked api_key value means "keep the stored token".
+    provider_configs: dict[str, dict[str, Any]] | None = None
     sandbox_backend: str | None = None
     default_context_window: int | None = None
     default_temperature: float | None = None
@@ -61,12 +70,108 @@ def _http_url(value: object, name: str) -> str:
     return url
 
 
-def _validated_updates(request: UpdateSettingsRequest) -> dict:
+def _profile_text(value: object, name: str, *, max_length: int = 200) -> str:
+    if not isinstance(value, str):
+        raise HTTPException(400, detail=f"{name} must be a string")
+    text = value.strip()
+    if not text or len(text) > max_length:
+        raise HTTPException(400, detail=f"{name} is not valid")
+    if any(c in text for c in ("\n", "\r", "\0", "..")):
+        raise HTTPException(400, detail=f"{name} is not valid")
+    return text
+
+
+def _merge_provider_configs(incoming: object, settings: Settings) -> dict[str, dict[str, Any]]:
+    """Merge a partial per-provider payload without clobbering stored secrets.
+
+    The browser receives masked tokens (``sk-...abcd``). Sending that value
+    back is treated as "unchanged"; an empty string removes the token.
+    """
+    if not isinstance(incoming, dict):
+        raise HTTPException(400, detail="provider_configs must be an object")
+
+    merged: dict[str, dict[str, Any]] = {
+        pid: dict(profile)
+        for pid, profile in (settings.provider_configs or {}).items()
+        if isinstance(profile, dict)
+    }
+
+    for raw_id, raw_profile in incoming.items():
+        pid = str(raw_id or "").strip().lower()
+        entry = get_provider_entry(pid)
+        if not entry or entry.get("kind") != "cloud":
+            raise HTTPException(400, detail=f"Unknown cloud provider: {pid}")
+
+        if raw_profile is None:
+            merged.pop(pid, None)
+            continue
+        if not isinstance(raw_profile, dict):
+            raise HTTPException(400, detail=f"provider_configs.{pid} must be an object")
+
+        current = merged.get(pid, {})
+        item = dict(current)
+
+        if "base_url" in raw_profile:
+            value = raw_profile.get("base_url")
+            if value is None or (isinstance(value, str) and not value.strip()):
+                item.pop("base_url", None)
+            else:
+                item["base_url"] = _http_url(value, f"provider_configs.{pid}.base_url")
+
+        if "api_key" in raw_profile:
+            value = raw_profile.get("api_key")
+            stored = current.get("api_key")
+            effective = settings.provider_profile(pid).get("api_key")
+            masks = {mask_secret(stored), mask_secret(effective)} - {""}
+            if value is None:
+                pass  # Absent/null means keep the current token.
+            elif not isinstance(value, str):
+                raise HTTPException(400, detail=f"provider_configs.{pid}.api_key must be a string")
+            elif value.strip() and value in masks:
+                pass  # Masked value echoed back by the settings console.
+            elif not value.strip():
+                # Keep an explicit empty marker so a cleared token does not
+                # silently fall back to an env/.env value.
+                item["api_key"] = ""
+            else:
+                token = value.strip()
+                if len(token) > 4096 or any(c in token for c in ("\n", "\r", "\0")):
+                    raise HTTPException(400, detail=f"provider_configs.{pid}.api_key is not valid")
+                item["api_key"] = token
+
+        if "model" in raw_profile:
+            value = raw_profile.get("model")
+            if value is None or (isinstance(value, str) and not value.strip()):
+                item.pop("model", None)
+            else:
+                item["model"] = _profile_text(value, f"provider_configs.{pid}.model")
+
+        if "max_tokens" in raw_profile:
+            value = raw_profile.get("max_tokens")
+            if value is None or value == "":
+                item.pop("max_tokens", None)
+            elif isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise HTTPException(400, detail=f"provider_configs.{pid}.max_tokens must be an integer >= 1")
+            else:
+                item["max_tokens"] = value
+
+        if item:
+            merged[pid] = item
+        else:
+            merged.pop(pid, None)
+
+    return merged
+
+
+def _validated_updates(request: UpdateSettingsRequest, settings: Settings) -> dict:
     raw = request.model_dump(exclude_unset=True)
     updates = {}
     for key, value in raw.items():
         # An explicit empty API key clears the stored credential.
-        if key == "openai_api_key":
+        if key == "provider_configs":
+            if value is not None:
+                updates[key] = _merge_provider_configs(value, settings)
+        elif key == "openai_api_key":
             if value is None:
                 continue
             updates[key] = value.strip() or None
@@ -92,7 +197,10 @@ def _validated_updates(request: UpdateSettingsRequest) -> dict:
 
     if "default_provider" in updates:
         if updates["default_provider"] not in PROVIDERS:
-            raise HTTPException(400, detail="default_provider must be llama_cpp, ollama or openai")
+            raise HTTPException(
+                400,
+                detail="default_provider must be one of: " + ", ".join(sorted(PROVIDERS)),
+            )
     if "sandbox_backend" in updates:
         if updates["sandbox_backend"] not in SANDBOX_BACKENDS:
             raise HTTPException(400, detail="sandbox_backend must be docker or local")
@@ -128,7 +236,7 @@ def read_settings(settings: Settings = Depends(get_settings)):
 @router.patch("")
 def update_settings(request: UpdateSettingsRequest, settings: Settings = Depends(get_settings)):
     """Apply settings to the running process only (restart clears them)."""
-    updates = _validated_updates(request)
+    updates = _validated_updates(request, settings)
     _apply_updates(updates, settings)
     return {"status": "success", "settings": settings.get_masked_settings()}
 
@@ -136,7 +244,7 @@ def update_settings(request: UpdateSettingsRequest, settings: Settings = Depends
 @router.put("/defaults")
 def save_default_settings(request: UpdateSettingsRequest, settings: Settings = Depends(get_settings)):
     """Apply settings and persist them as defaults in the data volume."""
-    updates = _validated_updates(request)
+    updates = _validated_updates(request, settings)
     _apply_updates(updates, settings)
     path = settings.save_settings(updates)
     return {

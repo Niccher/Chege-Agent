@@ -123,19 +123,26 @@ def list_tool_activity(
     for event in events:
         by_run.setdefault(event.run_id, []).append(event)
 
+    completion_by_start_id: dict[int, tuple[Event, dict]] = {}
+    for run_events in by_run.values():
+        open_starts: dict[str, list[Event]] = {}
+        for event in run_events:
+            data = _payload(event.payload_json)
+            tool_name = str(data.get("tool") or "")
+            if event.event_type == "tool.started":
+                open_starts.setdefault(tool_name, []).append(event)
+            elif event.event_type == "tool.completed":
+                if open_starts.get(tool_name):
+                    matched_start = open_starts[tool_name].pop(0)
+                    if matched_start.id is not None:
+                        completion_by_start_id[matched_start.id] = (event, data)
+
     activity = []
     for start_event, run, session, project in rows:
         start = _payload(start_event.payload_json)
         tool = str(start.get("tool") or "")
         args = start.get("arguments") if isinstance(start.get("arguments"), dict) else {}
-        completion = None
-        for event in by_run.get(run.id, []):
-            if event.seq <= start_event.seq or event.event_type != "tool.completed":
-                continue
-            data = _payload(event.payload_json)
-            if str(data.get("tool") or "") == tool:
-                completion = (event, data)
-                break
+        completion = completion_by_start_id.get(start_event.id) if start_event.id is not None else None
 
         result = ""
         status = "running"

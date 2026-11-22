@@ -1,5 +1,6 @@
 import asyncio
 from pydantic import BaseModel, Field
+from backend.app.security.paths import resolve_in, PathEscapeError
 from backend.app.tools.base import BaseTool, EmptyInput, RiskLevel, ToolContext, ToolResult
 
 
@@ -22,7 +23,12 @@ class GitDiffTool(BaseTool):
             cmd.append("HEAD")
 
         if args.path:
-            cmd.extend(["--", args.path])
+            try:
+                target_path = resolve_in(ctx.workspace_root, args.path)
+                rel_path = str(target_path.relative_to(ctx.workspace_root.resolve()))
+            except (ValueError, PathEscapeError) as e:
+                return ToolResult(content=f"ERROR: {str(e)}", is_error=True)
+            cmd.extend(["--", rel_path])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -104,7 +110,8 @@ class GitCommitTool(BaseTool):
             return ToolResult(content="ERROR: git commit timed out after 30 seconds.", is_error=True)
 
         out = stdout.decode("utf-8", errors="replace").strip() or stderr.decode("utf-8", errors="replace").strip()
-        return ToolResult(content=out)
+        is_err = (proc.returncode != 0)
+        return ToolResult(content=out or ("Commit succeeded." if not is_err else "Commit failed."), is_error=is_err)
 
 
 class GitLogInput(BaseModel):
@@ -118,8 +125,9 @@ class GitLogTool(BaseTool):
     args_model = GitLogInput
 
     async def run(self, ctx: ToolContext, args: GitLogInput) -> ToolResult:
+        limit = max(1, min(args.limit, 100))
         proc = await asyncio.create_subprocess_exec(
-            "git", "log", f"-{args.limit}", "--oneline", "--decorate",
+            "git", "log", f"-n{limit}", "--oneline", "--decorate",
             cwd=str(ctx.workspace_root),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

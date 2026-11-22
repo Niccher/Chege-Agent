@@ -28,14 +28,16 @@ class DockerSandbox(BaseSandbox):
         self,
         workspace_root: Path,
         project_slug: str,
-        image: str = "chege-sandbox-polyglot:latest",
+        image: str = "chege-agent-sandbox-polyglot:latest",
         docker_host: str = "tcp://docker-socket-proxy:2375",
+        container_prefix: str = "chege-agent-sandbox",
     ):
         self.workspace_root = workspace_root.resolve()
         self.project_slug = project_slug
         self.image = image
         self.docker_host = docker_host
-        self.container_name = f"chege-sbx-{project_slug}"
+        self.container_prefix = container_prefix
+        self.container_name = f"{container_prefix}-{project_slug}"
         self._client: Any = None
         self._processes: dict[str, dict[str, Any]] = {}
 
@@ -76,6 +78,16 @@ class DockerSandbox(BaseSandbox):
             container = client.containers.get(self.container_name)
         except NotFound:
             logger.info(f"Creating sandbox container {self.container_name} from {self.image}.")
+            # Security Rationale & Hardening Policy:
+            # 1. network_mode="none": Enforces absolute network isolation. Agent tools cannot exfiltrate data,
+            #    pivot to local network services, or initiate outbound reverse shells.
+            # 2. cap_drop=["ALL"]: Strips all Linux POSIX capabilities (chown, setuid, sys_admin, net_raw, etc.),
+            #    minimizing kernel attack surface and preventing container escapes.
+            # 3. read_only=True: Root filesystem is immutable; untrusted processes cannot modify system binaries,
+            #    install persistent backdoors, or tamper with system libraries.
+            # 4. tmpfs with noexec,nosuid: Allows temporary file scratchpads in memory without allowing binary execution
+            #    or setuid escalation from /tmp.
+            # 5. mem_limit, nano_cpus, pids_limit: Thwarts fork-bombs and runaway resource exhaustion on the host.
             host_config = client.utils.create_host_config(
                 binds={str(self.workspace_root): {"bind": "/workspace", "mode": "rw"}},
                 network_mode="none",
@@ -232,11 +244,19 @@ class DockerSandbox(BaseSandbox):
         process = self._processes.get(process_id)
         if not process:
             return False
+        pid_str = shlex.quote(str(process["pid"]))
         code, _, _ = await self.execute(
-            f"kill {shlex.quote(str(process['pid']))} 2>/dev/null || true",
+            f"kill {pid_str} 2>/dev/null",
             timeout=15,
         )
         if code == 0:
+            self._processes.pop(process_id, None)
+            return True
+        check_code, _, _ = await self.execute(
+            f"kill -0 {pid_str} 2>/dev/null",
+            timeout=10,
+        )
+        if check_code != 0:
             self._processes.pop(process_id, None)
             return True
         return False

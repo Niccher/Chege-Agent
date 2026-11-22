@@ -6,7 +6,7 @@ Chege Agent maintains persistent state across project workspaces, conversation s
 
 ## 1. Database Schema (SQLModel)
 
-Persistent relational data is stored in embedded SQLite at `./data/chege.db` using SQLModel. Deploy only with `bash scripts/deploy.sh --isolated`, which recreates **only** `chege-local-agent` and never touches unrelated containers. SQLite WAL mode is used (see the `-shm` and `-wal` files below). Secrets and password-bearing values are masked in `/api/v1/settings`. Settings can also be persisted as defaults to `data/settings.json` (written atomically with mode `0600`) via `PUT /api/v1/settings/defaults`; `DELETE /api/v1/settings/defaults` clears those saved defaults, while `PATCH /api/v1/settings` changes the running process only.
+Persistent relational data is stored in embedded SQLite at `./data/chege.db` using SQLModel. Deploy only with `bash scripts/deploy.sh --isolated`, which recreates **only** `chege-agent-local-web` and never touches unrelated containers. SQLite WAL mode is used (see the `-shm` and `-wal` files below). Secrets and password-bearing values are masked in `/api/v1/settings`. Settings can also be persisted as defaults to `data/settings.json` (written atomically with mode `0600`) via `PUT /api/v1/settings/defaults`; `DELETE /api/v1/settings/defaults` clears those saved defaults, while `PATCH /api/v1/settings` changes the running process only.
 
 ```mermaid
 erDiagram

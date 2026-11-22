@@ -67,6 +67,58 @@
 .chege-help-warn { color: var(--chege-warning) !important; }
 .chege-help-warn code { color: var(--chege-ink); }
 
+.chege-diagnostics {
+  border: 1px solid var(--chege-border);
+  border-radius: .6rem;
+  padding: .75rem .9rem;
+  background: var(--chege-surface-alt);
+}
+.chege-diag-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem 1rem;
+  align-items: center;
+  margin-bottom: .55rem;
+  font-size: .82rem;
+}
+.chege-diag-head b { font-weight: 800; }
+.chege-diag-check {
+  display: flex;
+  gap: .55rem;
+  align-items: flex-start;
+  padding: .3rem 0;
+  border-top: 1px dashed var(--chege-border);
+  font-size: .82rem;
+}
+.chege-diag-check:first-of-type { border-top: 0; }
+.chege-diag-check i { margin-top: .15rem; width: 1rem; text-align: center; }
+.chege-diag-check.is-ok i { color: var(--chege-success, #16a34a); }
+.chege-diag-check.is-warning i { color: var(--chege-warning, #d97706); }
+.chege-diag-check.is-error i { color: var(--chege-danger, #dc2626); }
+.chege-diag-check .diag-name {
+  min-width: 4.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: .68rem;
+  letter-spacing: .04em;
+  color: var(--chege-muted);
+}
+.chege-diag-check .diag-msg { flex: 1; color: var(--chege-ink); }
+
+.chege-token-status {
+  display: none;
+  margin-top: .4rem;
+  font-size: .8rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.chege-token-status.is-visible { display: flex; gap: .4rem; align-items: flex-start; }
+.chege-token-status.is-ok { color: var(--chege-success, #16a34a); }
+.chege-token-status.is-error { color: var(--chege-danger, #dc2626); }
+.chege-token-status.is-warning { color: var(--chege-warning, #d97706); }
+.chege-token-status.is-info { color: var(--chege-muted); }
+.chege-token-status i { margin-top: .15rem; }
+
 @media (max-width: 991.98px) {
   .chege-provider-panel { padding: .8rem; }
 }

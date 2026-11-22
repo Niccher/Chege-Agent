@@ -32,7 +32,7 @@ async def test_llamacpp_provider_health_ok():
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value.status_code = 200
         mock_get.return_value.headers = {"content-type": "application/json"}
-        mock_get.return_value.json.return_value = {"status": "ok", "slots_idle": 1}
+        mock_get.return_value.json = lambda: {"status": "ok", "slots_idle": 1}
         health = await prov.check_health()
         assert health["status"] == "ok"
 

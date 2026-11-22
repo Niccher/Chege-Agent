@@ -90,7 +90,7 @@ A native Uvicorn process is convenient for iteration, but final local verificati
 bash scripts/deploy.sh --isolated
 ```
 
-It recreates **only** `chege-local-agent` and never touches unrelated containers, and serves the app at **http://127.0.0.1:8001/**. Quick health checks: `/healthz`, `/readyz`, `/docs` and `/api/v1/openapi.json`. Useful shipped pages include `/app`, `/tools`, `/settings` and `/models`.
+It recreates **only** `chege-agent-local-web` and never touches unrelated containers, and serves the app at **http://127.0.0.1:8001/**. Quick health checks: `/healthz`, `/readyz`, `/docs` and `/api/v1/openapi.json`. Useful shipped pages include `/app`, `/tools`, `/settings` and `/models`.
 
 ---
 

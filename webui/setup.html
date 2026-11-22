@@ -40,7 +40,7 @@
         <div class="card-body">
           <pre class="doc-code"><code>git clone &lt;your-repo-url&gt; &amp;&amp; cd "Chege Agent"
 bash scripts/deploy.sh --isolated</code></pre>
-          <p class="text-muted mt-2 mb-2">This recreates only <code>chege-local-agent</code>; it never touches unrelated containers.
+          <p class="text-muted mt-2 mb-2">This recreates only <code>chege-agent-local-web</code>; it never touches unrelated containers.
             The script syncs <code>.env</code>, validates compose, builds, waits for health, and prints loopback URLs plus SSH-tunnel
             instructions. Open the canonical local URL <a href="http://127.0.0.1:8001/">http://127.0.0.1:8001/</a>. The API is bound
             to <code>127.0.0.1</code> and is not published on <code>0.0.0.0</code>.</p>
@@ -71,17 +71,23 @@ bash scripts/deploy.sh --isolated</code></pre>
         <div class="col-lg-6">
           <div class="card card-outline card-success h-100"><div class="card-header"><h3 class="card-title">Providers</h3></div>
             <div class="card-body">
-              <p class="mb-2">The Settings panels switch between <code>llama_cpp</code> (llama.cpp), <code>ollama</code> (Ollama) and
-                <code>openai</code> (OpenAI-compatible) based on <code>default_provider</code>. Only the selected runner's settings are
-                used; the playground can still override the provider per run.</p>
+              <p class="mb-2">The Settings provider picker lists <code>llama_cpp</code> (llama.cpp), <code>ollama</code> (Ollama) and
+                named cloud providers — <code>openai</code>, <code>deepseek</code>, <code>gemini</code>, <code>grok</code>,
+                <code>anthropic</code>, <code>mistral</code>, <code>groq</code>, <code>openrouter</code>, <code>together</code>,
+                <code>perplexity</code> and <code>custom</code> — based on <code>default_provider</code>. Each cloud provider keeps its
+                own endpoint, default model and masked token under <code>provider_configs</code>. Only the selected runner is used;
+                the playground can still override the provider per run.</p>
               <p class="mb-1"><b>llama.cpp (<code>llama_cpp</code>, default):</b> <code>llamacpp_url</code>
                 (<code>http://host.docker.internal:8080/v1</code>), <code>llamacpp_model</code> and <code>llamacpp_ctx</code> (8192).</p>
               <p class="mb-1"><b>Ollama (<code>ollama</code>):</b> <code>ollama_url</code>
                 (<code>http://host.docker.internal:11434</code>), <code>ollama_model</code>, <code>ollama_num_ctx</code> (8192) and
                 <code>ollama_keep_alive</code>.</p>
-              <p class="mb-2"><b>OpenAI-compatible (<code>openai</code>):</b> <code>openai_base_url</code>
-                (<code>https://api.openai.com/v1</code>), <code>openai_api_key</code> (masked, never echoed back) and
-                <code>openai_max_tokens</code>.</p>
+              <p class="mb-2"><b>Cloud providers:</b> each has a vendor default endpoint (for example
+                <code>https://api.deepseek.com/v1</code> or <code>https://generativelanguage.googleapis.com/v1beta/openai</code>), a
+                default model and its own token. Tokens are saved per provider in <code>data/settings.json</code>, masked in API
+                responses, and can also come from <code>CHEGE_&lt;PROVIDER&gt;_API_KEY</code>. The legacy
+                <code>openai_base_url</code> / <code>openai_api_key</code> / <code>openai_max_tokens</code> fields remain as fallbacks
+                for the <code>openai</code> profile.</p>
               <p class="mb-0 text-muted">llama-server knobs — <code>llamacpp_ctx</code>, <code>llamacpp_model</code>, host/port and
                 <code>n_gpu_layers</code> — take effect on the host only after <code>bash scripts/llamacpp.sh restart</code>. The
                 Settings UI marks which controls need a restart; other settings apply to the next run or immediately.</p>
@@ -107,7 +113,7 @@ bash scripts/deploy.sh --isolated</code></pre>
           <div class="row">
             <div class="col-md-6">
               <ul class="mb-2">
-                <li><code>default_provider</code> — <code>llama_cpp</code> / <code>ollama</code> / <code>openai</code></li>
+                <li><code>default_provider</code> — <code>llama_cpp</code> / <code>ollama</code> / any cloud provider id</li>
                 <li><code>default_temperature</code> (0.2)</li>
                 <li><code>default_top_p</code> (0.9)</li>
                 <li><code>default_context_window</code> (8192)</li>
@@ -121,7 +127,8 @@ bash scripts/deploy.sh --isolated</code></pre>
               <ul class="mb-0">
                 <li><code>llamacpp_url</code> / <code>llamacpp_model</code> / <code>llamacpp_ctx</code> (8192)</li>
                 <li><code>ollama_url</code> / <code>ollama_num_ctx</code> (8192) / <code>ollama_keep_alive</code> / <code>ollama_model</code></li>
-                <li><code>openai_base_url</code> / <code>openai_api_key</code> (masked) / <code>openai_max_tokens</code></li>
+                <li><code>provider_configs.{id}</code> — per-provider <code>base_url</code> / <code>api_key</code> (masked) / <code>model</code> / <code>max_tokens</code></li>
+                <li><code>openai_base_url</code> / <code>openai_api_key</code> (legacy fallbacks)</li>
               </ul>
             </div>
           </div>

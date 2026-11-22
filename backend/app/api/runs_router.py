@@ -17,6 +17,11 @@ _run_manager = None
 
 
 def get_run_manager(settings: Settings = Depends(get_settings)) -> RunManager:
+    """Retrieve or instantiate the application's singleton RunManager.
+
+    Injects current runtime settings, dynamic sandbox factory (Docker vs Local),
+    and default model provider.
+    """
     global _run_manager
     provider = get_provider(settings=settings)
 
@@ -27,6 +32,7 @@ def get_run_manager(settings: Settings = Depends(get_settings)) -> RunManager:
                 slug,
                 image=settings.default_sandbox_image,
                 docker_host=settings.docker_socket_proxy,
+                container_prefix=settings.sandbox_container_prefix,
             )
         return LocalSandbox(workspace_root)
 
@@ -45,7 +51,7 @@ DEFAULT_MODEL = "qwen2.5-coder:latest"
 
 
 def resolve_model(name: str | None, provider: str | None, settings: Settings) -> str:
-    """Use the operator's selected local model when no explicit one is given."""
+    """Use the operator's selected model when no explicit one is given."""
     if name and name != DEFAULT_MODEL:
         return name
     target = (provider or settings.default_provider).lower()
@@ -53,6 +59,14 @@ def resolve_model(name: str | None, provider: str | None, settings: Settings) ->
         return settings.ollama_model
     if target == "llama_cpp" and settings.llamacpp_model:
         return settings.llamacpp_model
+    from backend.app.core.provider_catalog import get_provider_entry
+    entry = get_provider_entry(target)
+    if entry and entry.get("kind") == "cloud":
+        profile = settings.provider_profile(target)
+        if profile.get("model"):
+            return profile["model"]
+        if entry.get("default_model"):
+            return entry["default_model"]
     return name or DEFAULT_MODEL
 
 
@@ -76,7 +90,25 @@ class SubmitApprovalsRequest(BaseModel):
     model: str = Field(default=DEFAULT_MODEL)
 
 
-@router.post("", status_code=status.HTTP_202_ACCEPTED)
+class StartRunResponse(BaseModel):
+    run_id: str = Field(description="Unique run ID")
+    status: str = Field(description="Run status, e.g. 'started'")
+
+
+class CancelRunResponse(BaseModel):
+    status: str = Field(description="'cancelled' if run was active, 'not_active' otherwise")
+
+
+class ResumeRunResponse(BaseModel):
+    status: str = Field(description="'resumed'")
+
+
+class RevertRunResponse(BaseModel):
+    status: str = Field(description="'reverted'")
+    git_ref: str = Field(description="The Git commit ref reverted to")
+
+
+@router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=StartRunResponse)
 async def start_run(
     request: StartRunRequest,
     response: Response,
@@ -84,6 +116,21 @@ async def start_run(
     db: Session = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
 ):
+    """Initialize and trigger a background execution run for an active session.
+
+    Validates session existence, security policy mode, and step bounds.
+    Creates a database Run record and launches the agent run loop asynchronously.
+
+    Args:
+        request: Run parameters including session ID, prompt, model, and policy.
+        response: FastAPI Response object used to set Location header.
+        run_mgr: Active RunManager instance.
+        db: Active database session.
+        settings: Application settings.
+
+    Returns:
+        StartRunResponse: Containing the unique run ID and 'started' status.
+    """
     session_rec = db.get(DBSession, request.session_id)
     if not session_rec:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -129,6 +176,15 @@ async def start_run(
 
 @router.get("/{run_id}")
 def get_run(run_id: str, db: Session = Depends(get_db_session)):
+    """Retrieve status, metadata, and ordered tool calls for a specific run.
+
+    Args:
+        run_id: Unique UUID string identifying the run.
+        db: Active database session dependency.
+
+    Returns:
+        dict: Serialized Run record and list of associated ToolCall records.
+    """
     run = db.get(Run, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -140,19 +196,39 @@ def get_run(run_id: str, db: Session = Depends(get_db_session)):
     return {"run": run, "tool_calls": tool_calls}
 
 
-@router.post("/{run_id}/cancel")
+@router.post("/{run_id}/cancel", response_model=CancelRunResponse)
 async def cancel_run(run_id: str, run_mgr: RunManager = Depends(get_run_manager)):
+    """Cancel an active agent run if currently executing or awaiting approval.
+
+    Args:
+        run_id: Unique UUID of the run to cancel.
+        run_mgr: Active RunManager singleton instance.
+
+    Returns:
+        CancelRunResponse: Status indicating 'cancelled' or 'not_active'.
+    """
     cancelled = await run_mgr.cancel_run(run_id)
     return {"status": "cancelled" if cancelled else "not_active"}
 
 
-@router.post("/{run_id}/approvals")
+@router.post("/{run_id}/approvals", response_model=ResumeRunResponse)
 async def submit_approvals(
     run_id: str,
     request: SubmitApprovalsRequest,
     run_mgr: RunManager = Depends(get_run_manager),
     settings: Settings = Depends(get_settings),
 ):
+    """Resume execution of an awaiting_approval run after user approval or rejection.
+
+    Args:
+        run_id: Unique UUID of the suspended run.
+        request: Tool approval and rejection decisions with optional edited arguments.
+        run_mgr: Active RunManager singleton instance.
+        settings: Application configuration settings.
+
+    Returns:
+        ResumeRunResponse: Status confirming resumption.
+    """
     try:
         await run_mgr.continue_run(
             run_id=run_id,
@@ -160,28 +236,49 @@ async def submit_approvals(
             model_name=resolve_model(request.model, None, settings),
         )
         return {"status": "resumed"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{run_id}/revert")
+@router.post("/{run_id}/revert", response_model=RevertRunResponse)
 def revert_run_checkpoint(
     run_id: str,
     db: Session = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
 ):
+    """Revert workspace to the pre-run snapshot checkpoint.
+
+    Args:
+        run_id: Unique UUID of the completed or cancelled run.
+        db: Active database session dependency.
+        settings: Application configuration settings.
+
+    Returns:
+        RevertRunResponse: Revert confirmation and target Git commit SHA.
+    """
     from backend.app.agent.checkpoints import CheckpointManager
     from backend.app.db.models import Checkpoint, Project
 
     cp = db.exec(select(Checkpoint).where(Checkpoint.run_id == run_id)).first()
     if not cp or not cp.git_ref:
-        raise HTTPException(status_code=404, detail="No checkpoint found for this run.")
+        raise HTTPException(
+            status_code=404,
+            detail="No checkpoint found for this run. Note that checkpoints require an initialized Git workspace.",
+        )
 
     project = db.get(Project, cp.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
 
     work_dir = settings.project_root(project.slug)
+    if not CheckpointManager.is_git_workspace(work_dir):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Project workspace '{project.slug}' is not an initialized Git repository; cannot revert.",
+        )
+
     reverted = CheckpointManager.revert_run(work_dir, cp.git_ref)
     if not reverted:
         raise HTTPException(status_code=500, detail="Failed to revert workspace.")

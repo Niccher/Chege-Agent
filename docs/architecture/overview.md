@@ -14,10 +14,10 @@ flowchart TB
 
     subgraph Host ["Host / Docker Compose Network (chege-net)"]
         subgraph Proxy ["Security Boundary"]
-            DSP["chege-docker-proxy\n(tecnativa/docker-socket-proxy)\nRead-only socket proxy"]
+            DSP["chege-agent-docker-proxy\n(tecnativa/docker-socket-proxy)\nRead-only socket proxy"]
         end
 
-        subgraph CoreApp ["Core Application (chege-local-agent)"]
+        subgraph CoreApp ["Core Application (chege-agent-local-web)"]
             FastAPI["FastAPI ASGI Server (Python 3.12)\nUvicorn container :8000 (host :8001)"]
             AgentLoop["RunManager & LoopGuard\nMulti-step Iteration\nUnified Context Budget"]
             ToolRegistry["Tool Registry\nFile, Exec, Git, Search Tools"]
@@ -52,7 +52,7 @@ flowchart TB
     DSP -.->|Restricted Docker API| Workdir
 ```
 
-Only `chege-local-agent` is recreated by `bash scripts/deploy.sh --isolated`; the host mapping is 8001 → container 8000. All REST routes are `/api/v1/*` and there is no authentication layer.
+Only `chege-agent-local-web` is recreated by `bash scripts/deploy.sh --isolated`; the host mapping is 8001 → container 8000. All REST routes are `/api/v1/*` and there is no authentication layer.
 
 ---
 
@@ -74,7 +74,7 @@ Only `chege-local-agent` is recreated by `bash scripts/deploy.sh --isolated`; th
 
 ## 3. Trust Boundaries & Security Principles
 
-1. **Host Isolation**: The Chege Agent application container does not mount the host Docker socket directly. Instead, it communicates with `chege-docker-proxy`, which strictly denies network and volume management endpoints.
+1. **Host Isolation**: The Chege Agent application container does not mount the host Docker socket directly. Instead, it communicates with `chege-agent-docker-proxy`, which strictly denies network and volume management endpoints.
 2. **Path Traversal Defense**: All file tools enforce `_safe_path()` checks against `/app/workdir/{project_slug}`. Symbolic links escaping the workspace root are rejected.
 3. **Approval Safety Gates**: Approvals default to `auto_edit`; ordinary writes and exact safe commands are auto-approved while destructive writes are always gated. `ask_all` and `full_auto` are selectable per run (`policy_mode`), but tool governance always applies first: disabled tools block and `prompt_once` grants are required even in `full_auto`. An automatic checkpoint is taken before every run.
 4. **Tool Governance**: Disabled tools are absent from the schemas sent to the model and are blocked by a mandatory execution guard, so a text-protocol tool-call injection cannot re-enable them. `grant_mode=prompt_once` requires a recorded, per-run user grant before that tool executes; grants are auditable in `tool_grants`. `ApprovalPolicy` is not used for grants.

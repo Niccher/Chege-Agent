@@ -108,30 +108,72 @@ parse_args() {
     done
 }
 
+COMPOSE_CMD=()
+
+detect_compose() {
+    if [ ${#COMPOSE_CMD[@]} -gt 0 ]; then
+        return 0
+    fi
+    if docker compose version >/dev/null 2>&1; then
+        COMPOSE_CMD=(docker compose)
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE_CMD=(docker-compose)
+    else
+        err "Neither 'docker compose' (v2 plugin) nor 'docker-compose' binary found."
+    fi
+}
+
 compose() {
+    detect_compose
     if [ "$DEV_MODE" = true ]; then
-        docker compose -f docker-compose.dev.yml "$@"
+        "${COMPOSE_CMD[@]}" -f docker-compose.dev.yml "$@"
     elif [ "$ISOLATED" = true ] && [ "$WITH_POSTGRES" = true ]; then
         # Isolated project + internal Postgres: both overlays must be applied.
-        COMPOSE_PROJECT_NAME="${CHEGE_LOCAL_PROJECT:-chege-local}" \
-            docker compose -f docker-compose.yml -f docker-compose.isolated.yml \
-            -f docker-compose.postgres.yml "$@"
+        COMPOSE_PROJECT_NAME="${CHEGE_LOCAL_PROJECT:-chege-agent-local}" \
+        CHEGE_POSTGRES_CONTAINER_NAME=chege-agent-local-postgres \
+        CHEGE_POSTGRES_VOLUME_NAME=chege-agent-local-postgres-data \
+            "${COMPOSE_CMD[@]}" -f docker-compose.yml -f docker-compose.postgres.yml \
+            -f docker-compose.isolated.yml "$@"
     elif [ "$ISOLATED" = true ]; then
         # Separate project + unique container names: never touches an existing
         # stack that happens to use the legacy `chegeagent` project name.
-        COMPOSE_PROJECT_NAME="${CHEGE_LOCAL_PROJECT:-chege-local}" \
-            docker compose -f docker-compose.yml -f docker-compose.isolated.yml "$@"
+        COMPOSE_PROJECT_NAME="${CHEGE_LOCAL_PROJECT:-chege-agent-local}" \
+            "${COMPOSE_CMD[@]}" -f docker-compose.yml -f docker-compose.isolated.yml "$@"
     elif [ "$WITH_POSTGRES" = true ]; then
-        docker compose -f docker-compose.yml -f docker-compose.postgres.yml "$@"
+        "${COMPOSE_CMD[@]}" -f docker-compose.yml -f docker-compose.postgres.yml "$@"
     else
-        docker compose -f docker-compose.yml "$@"
+        "${COMPOSE_CMD[@]}" -f docker-compose.yml "$@"
     fi
 }
 
 set_env() {
     local key="$1" value="$2"
-    if grep -q "^${key}=" .env 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${value}|" .env
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c '
+import sys
+key, val = sys.argv[1], sys.argv[2]
+path = ".env"
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+except FileNotFoundError:
+    lines = []
+found = False
+new_lines = []
+for line in lines:
+    if line.startswith(f"{key}="):
+        new_lines.append(f"{key}={val}\n")
+        found = True
+    else:
+        new_lines.append(line)
+if not found:
+    new_lines.append(f"{key}={val}\n")
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(new_lines)
+' "$key" "$value"
+    elif grep -q "^${key}=" .env 2>/dev/null; then
+        local escaped_val; escaped_val=$(printf '%s\n' "$value" | sed -e 's/[\/&|]/\\&/g')
+        sed -i "s|^${key}=.*|${key}=${escaped_val}|" .env
     else
         echo "${key}=${value}" >> .env
     fi
@@ -147,7 +189,7 @@ preflight() {
     section "1. Preflight checks"
     [ -f "docker-compose.yml" ] || err "Run this script from the repository root (docker-compose.yml not found)."
     command -v docker >/dev/null 2>&1 || err "Docker is not installed."
-    docker compose version >/dev/null 2>&1 || err "Docker Compose v2 plugin is required."
+    detect_compose
     docker info >/dev/null 2>&1 || err "Docker daemon is not reachable. Are you in the docker group?"
 
     if [ -f /etc/os-release ]; then
@@ -202,7 +244,7 @@ sync_env() {
     else
         set_env "CHEGE_SANDBOX_BACKEND" "docker"
         set_env "CHEGE_DOCKER_SOCKET_PROXY" "$(get_env CHEGE_DOCKER_SOCKET_PROXY tcp://docker-socket-proxy:2375)"
-        set_env "CHEGE_DEFAULT_SANDBOX_IMAGE" "$(get_env CHEGE_DEFAULT_SANDBOX_IMAGE chege-sandbox-polyglot:latest)"
+        set_env "CHEGE_DEFAULT_SANDBOX_IMAGE" "$(get_env CHEGE_DEFAULT_SANDBOX_IMAGE chege-agent-sandbox-polyglot:latest)"
         log "Sandbox: restricted Docker proxy ($(get_env CHEGE_DOCKER_SOCKET_PROXY tcp://docker-socket-proxy:2375))"
     fi
 
@@ -273,7 +315,7 @@ launch() {
     fi
 
     if [ "$LOCAL_SANDBOX" != true ]; then
-        local sandbox_image; sandbox_image=$(get_env CHEGE_DEFAULT_SANDBOX_IMAGE chege-sandbox-polyglot:latest)
+        local sandbox_image; sandbox_image=$(get_env CHEGE_DEFAULT_SANDBOX_IMAGE chege-agent-sandbox-polyglot:latest)
         [ -f sandbox/Dockerfile ] || err "sandbox/Dockerfile is missing but the Docker sandbox backend is enabled."
         log "Building per-project sandbox image: ${sandbox_image}"
         docker build -f sandbox/Dockerfile -t "$sandbox_image" sandbox \
@@ -369,12 +411,17 @@ case "$COMMAND" in
         LOG_SERVICE=""
         for arg in "$@"; do
             case "$arg" in
-                logs|--*) ;;
+                logs|-f|--follow|--*) ;;
                 *) LOG_SERVICE="$arg"; break ;;
             esac
         done
         if [ -n "$LOG_SERVICE" ]; then
-            compose logs -f --tail=200 "$LOG_SERVICE"
+            # Accept either a Compose service name or an explicit container name.
+            if compose config --services 2>/dev/null | grep -qxF "$LOG_SERVICE"; then
+                compose logs -f --tail=200 "$LOG_SERVICE"
+            else
+                docker logs -f --tail=200 "$LOG_SERVICE"
+            fi
         else
             compose logs -f --tail=200
         fi

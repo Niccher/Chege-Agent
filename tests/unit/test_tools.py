@@ -64,6 +64,15 @@ async def test_write_and_read_file(test_context: ToolContext):
 
 
 @pytest.mark.asyncio
+async def test_write_file_rejects_directory(test_context: ToolContext):
+    write_tool = WriteFileTool()
+    # Attempting to write to root directory '.' or subfolder
+    res = await write_tool.run(test_context, WriteFileInput(path=".", content="some text"))
+    assert res.is_error
+    assert "existing directory" in res.content
+
+
+@pytest.mark.asyncio
 async def test_read_file_binary_rejection(test_context: ToolContext):
     read_tool = ReadFileTool()
     bin_file = test_context.workspace_root / "binary.bin"

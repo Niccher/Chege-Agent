@@ -1,8 +1,10 @@
+name: chege-agent
+
 services:
   # Secure Docker API proxy limiting container permissions (SBX-01)
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:latest
-    container_name: chege-docker-proxy
+    container_name: chege-agent-docker-proxy
     environment:
       - CONTAINERS=1
       - EXEC=1
@@ -19,8 +21,8 @@ services:
 
   chege-agent:
     build: .
-    image: chege-agent:0.2.0
-    container_name: chege-agent
+    image: chege-agent-web:0.2.0
+    container_name: chege-agent-web
     ports:
       # Loopback only — the app has no authentication by design.
       - "127.0.0.1:${CHEGE_PORT:-8000}:8000"
@@ -34,7 +36,8 @@ services:
       - CHEGE_LOGS_DIR=/app/logs
       - CHEGE_SANDBOX_BACKEND=${CHEGE_SANDBOX_BACKEND:-docker}
       - CHEGE_DOCKER_SOCKET_PROXY=${CHEGE_DOCKER_SOCKET_PROXY:-tcp://docker-socket-proxy:2375}
-      - CHEGE_DEFAULT_SANDBOX_IMAGE=${CHEGE_DEFAULT_SANDBOX_IMAGE:-chege-sandbox-polyglot:latest}
+      - CHEGE_DEFAULT_SANDBOX_IMAGE=${CHEGE_DEFAULT_SANDBOX_IMAGE:-chege-agent-sandbox-polyglot:latest}
+      - CHEGE_SANDBOX_CONTAINER_PREFIX=${CHEGE_SANDBOX_CONTAINER_PREFIX:-chege-agent-sandbox}
       - CHEGE_DEFAULT_PROVIDER=${CHEGE_DEFAULT_PROVIDER:-llama_cpp}
       - CHEGE_LLAMACPP_URL=http://host.docker.internal:8080/v1
       - CHEGE_LLAMACPP_CONTROL_URL=http://host.docker.internal:8081
@@ -46,6 +49,17 @@ services:
       - CHEGE_OLLAMA_KEEP_ALIVE=${CHEGE_OLLAMA_KEEP_ALIVE:-15m}
       - CHEGE_OPENAI_BASE_URL=${CHEGE_OPENAI_BASE_URL:-https://api.openai.com/v1}
       - CHEGE_OPENAI_API_KEY=${CHEGE_OPENAI_API_KEY:-}
+      # Optional cloud-provider fallbacks. Tokens saved in Settings take
+      # precedence; these are only used when a profile has no token.
+      - CHEGE_DEEPSEEK_API_KEY=${CHEGE_DEEPSEEK_API_KEY:-}
+      - CHEGE_GEMINI_API_KEY=${CHEGE_GEMINI_API_KEY:-}
+      - CHEGE_GROK_API_KEY=${CHEGE_GROK_API_KEY:-}
+      - CHEGE_ANTHROPIC_API_KEY=${CHEGE_ANTHROPIC_API_KEY:-}
+      - CHEGE_MISTRAL_API_KEY=${CHEGE_MISTRAL_API_KEY:-}
+      - CHEGE_GROQ_API_KEY=${CHEGE_GROQ_API_KEY:-}
+      - CHEGE_OPENROUTER_API_KEY=${CHEGE_OPENROUTER_API_KEY:-}
+      - CHEGE_TOGETHER_API_KEY=${CHEGE_TOGETHER_API_KEY:-}
+      - CHEGE_PERPLEXITY_API_KEY=${CHEGE_PERPLEXITY_API_KEY:-}
       - CHEGE_DEFAULT_CONTEXT_WINDOW=${CHEGE_DEFAULT_CONTEXT_WINDOW:-8192}
       - CHEGE_DEFAULT_TEMPERATURE=${CHEGE_DEFAULT_TEMPERATURE:-0.2}
       - CHEGE_DEFAULT_TOP_P=${CHEGE_DEFAULT_TOP_P:-0.9}

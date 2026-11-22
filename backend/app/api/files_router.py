@@ -171,4 +171,5 @@ def commit_workspace(
     work_dir = settings.project_root(request.project_slug)
     subprocess.run(["git", "add", "."], cwd=work_dir, capture_output=True)
     res = subprocess.run(["git", "commit", "-m", request.message], cwd=work_dir, capture_output=True, text=True)
-    return {"status": "success", "output": res.stdout or res.stderr}
+    status_str = "success" if res.returncode == 0 else "error"
+    return {"status": status_str, "output": (res.stdout or res.stderr).strip()}

@@ -53,3 +53,13 @@ def test_loop_guard_consecutive_errors():
         guard.record_result(is_error=True)
 
     assert "consecutive tool failures" in str(exc_info.value)
+
+
+def test_loop_guard_non_consecutive_repeats_do_not_halt():
+    guard = LoopGuard(warning_threshold=3, stall_threshold=5)
+
+    # Calling read_file distributed across different actions should not stall
+    for i in range(6):
+        guard.record_call("read_file", {"path": "README.md"})
+        guard.record_call("run_command", {"command": f"echo {i}"})
+        guard.record_call("list_files", {"directory": f"dir{i}"})

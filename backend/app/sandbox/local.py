@@ -36,6 +36,10 @@ class LocalProcess:
             _consume(self.proc.stderr),
             return_exceptions=True,
         )
+        try:
+            await self.proc.wait()
+        except Exception:
+            pass
 
 
 class LocalSandbox(BaseSandbox):

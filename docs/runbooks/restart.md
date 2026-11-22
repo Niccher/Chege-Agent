@@ -14,7 +14,7 @@ The canonical health check URL is **http://127.0.0.1:8001/healthz**; use only po
 | Settings that take effect on the next run | Apply on the next agent run; no restart needed. |
 | Saved defaults via `PUT /api/v1/settings/defaults` | Applies now and persists to `data/settings.json` (atomic write, mode 0600). `DELETE /api/v1/settings/defaults` clears saved defaults; runtime values remain until restart. |
 | llama.cpp server knobs (`CHEGE_LLAMACPP_CTX`, `llamacpp_model`, host/port, `n_gpu_layers`) | Require `bash scripts/llamacpp.sh restart` on the host to take effect. |
-| Backend code / dependencies / container image | Requires `bash scripts/deploy.sh --isolated` (recreates only `chege-local-agent`). |
+| Backend code / dependencies / container image | Requires `bash scripts/deploy.sh --isolated` (recreates only `chege-agent-local-web`). |
 
 Saved defaults live in `data/settings.json`. Appearance/theme is browser-only (localStorage key `lte-theme`) and is never sent to the server. The Settings UI labels which controls require a restart.
 
@@ -44,7 +44,7 @@ Deploy only the agent container:
 bash scripts/deploy.sh --isolated
 ```
 
-This recreates **only** `chege-local-agent`; it never touches unrelated containers. Preserve `ajaia_web`, `ajaia_postgres`, `ajaia_minio`, legacy `chege-agent`, `coding-agent`, and `chege-local-proxy` — do not stop, rebuild, or remove them as part of Chege Agent operations.
+This recreates **only** `chege-agent-local-web`; it never touches unrelated containers. Preserve `ajaia_web`, `ajaia_postgres`, `ajaia_minio`, legacy `chege-agent`, `coding-agent`, and `chege-agent-local-docker-proxy` — do not stop, rebuild, or remove them as part of Chege Agent operations.
 
 ---
 

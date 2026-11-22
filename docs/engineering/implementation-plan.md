@@ -180,7 +180,7 @@ Removing auth raises the importance of the local sandbox boundary: a prompt inje
 | # | Task | Files | Acceptance criteria |
 |---|---|---|---|
 | 2.1 | Replace regex allowlist with `shlex.split()` + exact argv comparison; reject shell metacharacters; require approval for `delete_file`, `git_commit`, and other destructive writes even under `auto_edit` | `backend/app/agent/approval_engine.py`, `docs/api/contract.md` | `pytest ; cat ...` is NOT auto-approved; tests cover metacharacter variants |
-| 2.2 | Decide and implement sandbox behavior: **either** use Docker SDK with `DOCKER_HOST=tcp://docker-socket-proxy:2375` and ship `chege-sandbox-polyglot`, **or** remove the `docker` backend and document local execution honestly | `backend/app/sandbox/docker.py`, `Dockerfile`, `docker-compose.yml` | No silent fallback in production; isolation claim matches reality |
+| 2.2 | Decide and implement sandbox behavior: **either** use Docker SDK with `DOCKER_HOST=tcp://docker-socket-proxy:2375` and ship `chege-agent-sandbox-polyglot`, **or** remove the `docker` backend and document local execution honestly | `backend/app/sandbox/docker.py`, `Dockerfile`, `docker-compose.yml` | No silent fallback in production; isolation claim matches reality |
 | 2.3 | Harden sandbox containers: contained cwd via `resolve_in`, `--network none`, `--user 10001`, `--cap-drop ALL`, `--read-only`, `--rm`, overall deadline, kill process groups | `backend/app/sandbox/*` | Escape/network tests fail as expected |
 | 2.4 | Bind approvals to `run_id` and `status='pending'`; re-run approval evaluation after edited args; persist `policy_mode` on `Run` and ignore client-supplied `full_auto` on resume | `backend/app/api/runs_router.py`, `run_manager.py`, `db/models.py` | Cross-run/stale/edited approval attempts rejected |
 | 2.5 | Apply `scrub_secrets()` centrally in `EventManager.emit`, before `Message` writes, and in logging; extend patterns to app tokens and generic `KEY=value` | `events/manager.py`, `run_manager.py`, `security/scrubber.py`, `core/logging.py` | Reading a `.env` never puts secrets into SSE, DB, logs, or LLM context |
@@ -454,7 +454,7 @@ All are instantiated statically in `backend/app/tools/registry.py:56-80`; descri
 |---|---|
 | `bash -n scripts/deploy.sh`; `docker compose config -q`; Python `compileall` | Passed |
 | `./py-env/bin/python -m pytest -q` | **40 passed, 2 warnings** |
-| `bash scripts/deploy.sh --isolated` | Succeeded; only `chege-local-agent` recreated; `chege-local-proxy` and all unrelated containers untouched |
+| `bash scripts/deploy.sh --isolated` | Succeeded; only `chege-agent-local-web` recreated; `chege-agent-local-docker-proxy` and all unrelated containers untouched |
 | Live HTTP 200 | `/healthz`, `/readyz`, `/api/v1/openapi.json`, `/`, `/app`, `/settings`, `/tools`, `/models`, `/status`, `/guide`, `/api` |
 | Live API | `/api/v1/settings` exposes all new fields; `/api/v1/tools` returns 20 tools with `purpose`/`enabled`/`grant_mode`; `/api/v1/files/tree?project_slug=js-calculator` returns nested nodes |
 | Context-budget smoke run | Run `6c7d7ae1-…` completed with `run.started`, `run.phase`, `message.delta`, `run.completed`; llama log showed `n_tokens = 2048` (previously 12,351 tokens overflowed) |

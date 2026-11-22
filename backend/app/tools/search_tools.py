@@ -48,7 +48,7 @@ class GrepTool(BaseTool):
         if args.file_glob:
             cmd.extend(["-g", args.file_glob])
 
-        cmd.extend([args.pattern, str(target_path)])
+        cmd.extend(["-e", args.pattern, "--", str(target_path)])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,

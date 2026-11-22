@@ -233,6 +233,12 @@ class RunManager:
 
                     target_provider = (provider_name or settings.default_provider or "").lower()
                     num_ctx = settings.ollama_num_ctx if target_provider == "ollama" else settings.default_context_window
+                    # Architectural Rationale:
+                    # Models require token headroom to generate thinking traces and structured tool call arguments.
+                    # Without an explicit completion reserve, prompt assembly could consume 100% of the context budget,
+                    # leading to truncated JSON arguments, missing closing braces, or abrupt OOM/abort errors from the inference engine.
+                    # Clamping between 512 and 2048 guarantees adequate output budget for compact contexts (e.g. 4k)
+                    # while preventing excessive reservation from starving input history in large contexts (e.g. 32k+).
                     reserve = max(512, min(2048, settings.default_context_window // 8))
                     options = ModelOptions(
                         num_ctx=num_ctx,
@@ -625,8 +631,10 @@ class RunManager:
         engine = get_db_engine()
         with Session(engine, expire_on_commit=False) as db:
             run = db.get(Run, run_id)
-            if not run or run.status != "awaiting_approval":
-                raise ValueError(f"Run {run_id} is not awaiting approval.")
+            if not run:
+                raise KeyError(f"Run {run_id} not found.")
+            if run.status != "awaiting_approval":
+                raise ValueError(f"Run {run_id} is not awaiting approval (status: {run.status}).")
 
             session_rec = db.get(DBSession, run.session_id)
             project_rec = db.get(Project, session_rec.project_id)
@@ -657,7 +665,25 @@ class RunManager:
                     continue
 
                 tool_instance = self.registry.get(tc.tool_name)
-                if action == "approve" and tool_instance:
+
+                if action == "approve":
+                    if not tool_instance:
+                        tc.status = "error"
+                        res_content = f"ERROR: Approved tool '{tc.tool_name}' is not registered in the active tool catalog."
+                        tc.error = res_content
+                        db.add(tc)
+                        db.commit()
+                        tool_msg = Message(
+                            session_id=session_rec.id,
+                            role="tool",
+                            tool_name=tc.tool_name,
+                            tool_call_id=tc.id,
+                            content=res_content,
+                        )
+                        db.add(tool_msg)
+                        db.commit()
+                        continue
+
                     args_to_use = edited_args if edited_args is not None else json.loads(tc.arguments_json)
                     tc.status = "approved"
                     if edited_args is not None:

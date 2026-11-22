@@ -15,16 +15,32 @@ The Settings console at [`/settings`](http://127.0.0.1:8001/settings) is a singl
 | Clear saved defaults | `DELETE /api/v1/settings/defaults` | Clears saved defaults; runtime values remain until restart |
 | Read (masked) | `GET /api/v1/settings` | Returns the current settings with secrets masked |
 | Test / list models | `GET /api/v1/settings/test-llamacpp`, `GET /api/v1/settings/test-ollama`, `GET /api/v1/settings/models` | — |
+| List providers | `GET /api/v1/providers` | Catalog, saved endpoint/model and masked token state per provider |
+| Save one provider | `PUT /api/v1/providers/{id}` | Saves that provider's `base_url`, `api_key`, `model` and `max_tokens` |
+| Clear one provider | `DELETE /api/v1/providers/{id}/config` | Removes that provider's saved profile |
+| Test a token | `POST /api/v1/providers/{id}/test-token` | Validates one token, returns the model list when supported, and falls back to a one-token chat when `/models` is unavailable |
+| Test a provider | `POST /api/v1/providers/test` | End-to-end checks: endpoint, token, `/models`, then a tiny live chat completion; returns per-check status, HTTP code and latency |
+| Provider models | `GET /api/v1/providers/{id}/models` | Live model ids from that provider |
 
-Saved defaults are loaded **after** environment variables and `.env` on startup, so they take precedence. The file is written atomically with mode `0600`. The OpenAI API key is masked in all responses and never echoed back.
+Saved defaults are loaded **after** environment variables and `.env` on startup, so they take precedence. The file is written atomically with mode `0600`. Every provider token is masked in all responses and never echoed back.
+
+Use the inline **Test token** button beside the API token field to validate a token before relying on it. It works with an unsaved token, reports success or a specific error (`401/403` rejected, missing token, unreachable endpoint, rate limit), and on success fills the **Default model dropdown**:
+
+- first from the provider's OpenAI-style `/models`;
+- then from a vendor-native endpoint (Gemini `v1beta/models`, Anthropic `v1/models`) when needed;
+- then from a curated suggestion list if the account cannot list models.
+
+The dropdown includes **Custom / type a model id…**, so any model id the account can access can still be entered manually. If a vendor does not expose any model endpoint, the token test falls back to a one-token chat request before deciding whether the token is valid.
+
+**Run full diagnostics** (below the panels) runs the complete check: endpoint, token source, model listing and a live chat, with HTTP status, latency and fix hints. The live chat test may consume a few tokens.
 
 ### Settings fields and defaults
 
-The console shows and edits the fields below. Provider panels switch between `llama_cpp` (llama.cpp), `ollama` (Ollama), and `openai` (OpenAI-compatible) based on the selected `default_provider`; only the selected runner's settings are used. The playground can still override the provider per run. The “Model (GGUF alias/path)” and “Model tag” fields are backed by datalists of the models currently installed on disk, and the Download models card offers a curated Hugging Face GGUF catalog plus a custom URL field. Hugging Face tokens are optional, used only for that download, and never persisted.
+The console shows and edits the fields below. The provider picker lists `llama_cpp` and `ollama`, plus named cloud providers: `openai`, `deepseek`, `gemini`, `grok`, `anthropic`, `mistral`, `groq`, `openrouter`, `together`, `perplexity` and `custom`. Each cloud provider keeps its own endpoint, default model, token and output-token limit in `provider_configs` (for example `provider_configs.deepseek.api_key`). Only the selected runner is used by default; the playground can still override the provider per run. The “Model (GGUF alias/path)” and “Model tag” fields are backed by datalists of the models currently installed on disk, and the Download models card offers a curated Hugging Face GGUF catalog plus a custom URL field. Hugging Face tokens are optional, used only for that download, and never persisted.
 
 | Setting | Default | Notes |
 |---|---|---|
-| `default_provider` | `llama_cpp` | Runner used by default: `llama_cpp`, `ollama`, or `openai`. |
+| `default_provider` | `llama_cpp` | Runner used by default: `llama_cpp`, `ollama`, or any cloud provider id from the catalog. |
 | `default_temperature` | `0.2` | Sampling temperature for new runs. |
 | `default_top_p` | `0.9` | Nucleus sampling value for new runs. |
 | `default_context_window` | `8192` | Agent-side prompt budget (see [Context budget](#context-budget) below). |
@@ -39,9 +55,10 @@ The console shows and edits the fields below. Provider panels switch between `ll
 | `ollama_num_ctx` | `8192` | Context size requested from Ollama. |
 | `ollama_keep_alive` | — | How long Ollama keeps the model loaded. |
 | `ollama_model` | — | Ollama model name. |
-| `openai_base_url` | `https://api.openai.com/v1` | Base URL for OpenAI-compatible endpoints. |
-| `openai_api_key` | masked | Masked in all responses; never echoed back. |
-| `openai_max_tokens` | — | Maximum size of an OpenAI-compatible completion. |
+| `openai_base_url` | `https://api.openai.com/v1` | Legacy fallback base URL for the `openai` profile. |
+| `openai_api_key` | masked | Legacy fallback token for the `openai` profile. |
+| `openai_max_tokens` | — | Legacy fallback output limit for the `openai` profile. |
+| `provider_configs` | `{}` | Per-cloud-provider `{base_url, api_key, model, max_tokens}` profiles, keyed by catalog id. Tokens are masked in responses. |
 
 Only console-editable keys can be saved as defaults: every field above except the read-only `sandbox_backend`. Host, port, and database binding are deploy-time values and cannot be changed here — update `.env` and redeploy with `bash scripts/deploy.sh --isolated`.
 
@@ -106,15 +123,16 @@ The [Tools page](http://127.0.0.1:8001/tools#activity) also keeps a persistent *
 | `CHEGE_CORS_ORIGINS` | list | `["http://localhost:8001", ...]` | No | Whitelist of origins permitted to make cross-origin requests. |
 | `CHEGE_SANDBOX_BACKEND`| string | `docker` | No | `docker` = isolated per-project container via the proxy; `local` = explicit no-isolation execution. Read-only in the Settings console. Docker mode fails loudly if the proxy is unavailable; it never falls back silently. |
 | `CHEGE_DOCKER_SOCKET_PROXY` | string | `tcp://docker-socket-proxy:2375` | No | URI of the Docker API proxy when `sandbox_backend=docker`. |
-| `CHEGE_DEFAULT_SANDBOX_IMAGE` | string | `chege-sandbox-polyglot:latest` | No | Base Docker image used for spawned workspace containers. |
-| `CHEGE_DEFAULT_PROVIDER` | string | `llama_cpp` | No | Default LLM client: `llama_cpp` (llama.cpp), `ollama` (Ollama), or `openai` (OpenAI-compatible). |
+| `CHEGE_DEFAULT_SANDBOX_IMAGE` | string | `chege-agent-sandbox-polyglot:latest` | No | Base Docker image used for spawned workspace containers. |
+| `CHEGE_SANDBOX_CONTAINER_PREFIX` | string | `chege-agent-sandbox` | No | Prefix for per-project sandbox containers. Isolated deployments use `chege-agent-local-sandbox`. |
+| `CHEGE_DEFAULT_PROVIDER` | string | `llama_cpp` | No | Default LLM client: `llama_cpp`, `ollama`, or a cloud provider id (`openai`, `deepseek`, `gemini`, `grok`, `anthropic`, `mistral`, `groq`, `openrouter`, `together`, `perplexity`, `custom`). |
 | `CHEGE_LLAMACPP_URL` | string | `http://host.docker.internal:8080/v1` | No | llama-server endpoint accessible from the Chege Agent container. |
 | `CHEGE_LLAMACPP_CTX` | integer | `8192` | No | llama-server context (`n_ctx`). Restart llama-server with `bash scripts/llamacpp.sh restart` after changing it. |
 | `CHEGE_LLAMACPP_CONTROL_URL` | string | `http://host.docker.internal:8081` | No | Host model control service used by the Models page for GGUF download/switch. |
 | `CHEGE_MODELCTL_PORT` | integer | `8081` | No | Port the host model control service listens on (Docker bridge only). |
 | `CHEGE_OLLAMA_URL` | string | `http://host.docker.internal:11434` | No | Ollama endpoint accessible from the Chege Agent container. |
 | `CHEGE_OPENAI_BASE_URL` | string | `https://api.openai.com/v1` | No | Base URL for OpenAI-compatible LLM endpoints. |
-| `CHEGE_OPENAI_API_KEY` | string | `None` | Optional | API key for OpenAI-compatible providers; masked in all responses. |
+| `CHEGE_OPENAI_API_KEY` | string | `None` | Optional | Legacy fallback token for the `openai` profile; masked in all responses. Each cloud provider also accepts its own variable (`CHEGE_DEEPSEEK_API_KEY`, `CHEGE_GEMINI_API_KEY`, `CHEGE_GROK_API_KEY`, `CHEGE_ANTHROPIC_API_KEY`, `CHEGE_MISTRAL_API_KEY`, `CHEGE_GROQ_API_KEY`, `CHEGE_OPENROUTER_API_KEY`, `CHEGE_TOGETHER_API_KEY`, `CHEGE_PERPLEXITY_API_KEY`). |
 | `CHEGE_DEFAULT_CONTEXT_WINDOW` | integer | `8192` | No | Agent-side prompt budget. Tool-schema overhead and a completion reserve are subtracted before building history. Separate from `CHEGE_LLAMACPP_CTX`. |
 | `CHEGE_MAX_STEPS` | integer | `50` | No | Maximum tool execution loop iterations per run step. |
 | `CHEGE_RUN_TIMEOUT_SECONDS` | integer | `600` | No | Maximum time in seconds before an active agent run is timed out. |

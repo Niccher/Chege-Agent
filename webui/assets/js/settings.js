@@ -1,18 +1,26 @@
 /* Unified settings console — reads, tests and saves /api/v1/settings. */
 (function () {
   const $ = (id) => document.getElementById(id);
-  let maskedApiKey = '';
 
   const NUMERIC_FIELDS = [
     'default_context_window', 'max_steps', 'default_temperature', 'default_top_p',
     'run_timeout_seconds', 'provider_timeout_seconds', 'llamacpp_ctx',
-    'ollama_num_ctx', 'openai_max_tokens'
+    'ollama_num_ctx'
   ];
   const TEXT_FIELDS = [
-    'default_provider', 'llamacpp_url', 'ollama_url', 'openai_base_url',
+    'default_provider', 'llamacpp_url', 'ollama_url',
     'sandbox_backend', 'llamacpp_model', 'ollama_model',
     'ollama_keep_alive'
   ];
+
+  // Provider catalog + per-provider cloud drafts. profiles[pid] mirrors the
+  // backend's provider_configs entry; api_key stays masked until edited.
+  let providerCatalog = [];
+  let profiles = {};
+  let savedMasks = {};
+  let modelCache = {};
+  let currentCloud = null;
+  const dirtyProviders = new Set();
 
   function setResult(status, message) {
     const el = $('provider-test-result');
@@ -21,12 +29,268 @@
     el.textContent = message;
   }
 
+  function resetDiagnostics() {
+    const el = $('provider-diagnostics');
+    if (!el) return;
+    el.classList.add('d-none');
+    el.innerHTML = '';
+  }
+
+  function diagIcon(status) {
+    if (status === 'ok') return 'fa-circle-check';
+    if (status === 'warning') return 'fa-triangle-exclamation';
+    return 'fa-circle-xmark';
+  }
+
+  function renderDiagnostics(result) {
+    const el = $('provider-diagnostics');
+    if (!el) return;
+    if (!result || !Array.isArray(result.checks) || !result.checks.length) {
+      resetDiagnostics();
+      return;
+    }
+    const headBits = [];
+    if (result.label || result.provider) headBits.push(`<b>${Chege.escapeHtml(result.label || result.provider)}</b>`);
+    if (result.url) headBits.push(`<span class="text-muted">${Chege.escapeHtml(result.url)}</span>`);
+    if (result.model) headBits.push(`model <code>${Chege.escapeHtml(result.model)}</code>`);
+    if (result.token_source) {
+      const tokenText = result.token_set
+        ? `token ${Chege.escapeHtml(result.token_masked || 'set')} (${Chege.escapeHtml(result.token_source)})`
+        : 'no token';
+      headBits.push(`<span>${tokenText}</span>`);
+    }
+    if (result.latency_ms != null) headBits.push(`<span class="text-muted">${result.latency_ms} ms</span>`);
+
+    const checks = result.checks.map((check) => {
+      const status = ['ok', 'warning', 'error'].includes(check.status) ? check.status : 'error';
+      const extra = check.http_status ? ` <span class="text-muted">HTTP ${check.http_status}</span>` : '';
+      return `<div class="chege-diag-check is-${status}">
+        <i class="fas ${diagIcon(status)}"></i>
+        <span class="diag-name">${Chege.escapeHtml(check.name || 'check')}</span>
+        <span class="diag-msg">${Chege.escapeHtml(check.message || '')}${extra}</span>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `<div class="chege-diag-head">${headBits.join(' · ')}</div>${checks}`;
+    el.classList.remove('d-none');
+  }
+
+  function providerById(id) {
+    return providerCatalog.find((p) => p.id === id || p.name === id) || null;
+  }
+
+  function isCloudProvider(id) {
+    const entry = providerById(id);
+    return entry ? entry.kind === 'cloud' : !['llama_cpp', 'ollama', ''].includes(id);
+  }
+
+  function providerLabel(id) {
+    const entry = providerById(id);
+    return entry ? entry.label : id;
+  }
+
+  function providerIcon(id) {
+    const entry = providerById(id);
+    return entry && entry.icon ? entry.icon : 'fa-cloud';
+  }
+
+  function baseProfile(pid) {
+    const entry = providerById(pid) || {};
+    return {
+      base_url: profiles[pid]?.base_url ?? entry.base_url ?? '',
+      api_key: profiles[pid]?.api_key ?? '',
+      api_key_set: Boolean(profiles[pid]?.api_key_set),
+      model: profiles[pid]?.model ?? entry.default_model ?? '',
+      max_tokens: profiles[pid]?.max_tokens ?? null,
+    };
+  }
+
+  function captureCloudDraft() {
+    if (!currentCloud || !$('cloud_base_url')) return;
+    profiles[currentCloud] = {
+      ...baseProfile(currentCloud),
+      base_url: $('cloud_base_url').value.trim(),
+      api_key: $('cloud_api_key').value.trim(),
+      model: $('cloud_model').value.trim(),
+      max_tokens: $('cloud_max_tokens').value === '' ? null : Number($('cloud_max_tokens').value),
+    };
+  }
+
+  function setTokenStatus(status, message) {
+    const el = $('token-status');
+    if (!el) return;
+    const icons = {
+      ok: 'fa-circle-check',
+      error: 'fa-circle-xmark',
+      warning: 'fa-triangle-exclamation',
+      info: 'fa-spinner fa-spin',
+    };
+    el.className = 'chege-token-status is-visible is-' + status;
+    el.innerHTML = `<i class="fas ${icons[status] || 'fa-circle-info'}"></i><span>${Chege.escapeHtml(message)}</span>`;
+  }
+
+  function resetTokenStatus() {
+    const el = $('token-status');
+    if (!el) return;
+    el.className = 'chege-token-status';
+    el.innerHTML = '';
+  }
+
+  function setTokenVisible(visible) {
+    const input = $('cloud_api_key');
+    const btn = $('toggle-token-visibility');
+    if (!input || !btn) return;
+    input.type = visible ? 'text' : 'password';
+    const icon = btn.querySelector('i');
+    if (icon) icon.className = 'fas ' + (visible ? 'fa-eye-slash' : 'fa-eye');
+    const label = visible ? 'Hide token' : 'Show token';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+  }
+
+  function renderModelChoices(pid, selectedValue) {
+    const models = modelCache[pid] || [];
+    const select = $('cloud_model_select');
+    const input = $('cloud_model');
+    const value = (selectedValue ?? input.value ?? '').trim();
+    const options = ['<option value="">Select a model…</option>']
+      .concat(models.map((name) =>
+        `<option value="${Chege.escapeHtml(name)}">${Chege.escapeHtml(name)}</option>`))
+      .concat(['<option value="__custom__">Custom / type a model id…</option>']);
+    select.innerHTML = options.join('');
+
+    if (value && models.includes(value)) {
+      select.value = value;
+      input.value = value;
+      input.classList.add('d-none');
+    } else if (value) {
+      select.value = '__custom__';
+      input.value = value;
+      input.classList.remove('d-none');
+    } else if (models.length) {
+      const preferred = providerById(pid)?.default_model;
+      const picked = models.includes(preferred) ? preferred : models[0];
+      select.value = picked;
+      input.value = picked;
+      input.classList.add('d-none');
+    } else {
+      select.value = '__custom__';
+      input.value = '';
+      input.classList.remove('d-none');
+    }
+  }
+
+  function populateCloudModels(pid, models, note) {
+    const clean = [...new Set((models || []).filter((name) => typeof name === 'string' && name.trim()))];
+    modelCache[pid] = clean;
+    const before = $('cloud_model').value.trim();
+    renderModelChoices(pid, before);
+    const after = $('cloud_model').value.trim();
+    if (after && after !== before) dirtyProviders.add(pid);
+    if (clean.length) {
+      $('cloud-model-meta').textContent =
+        `${note ? note + ' ' : ''}${clean.length} model(s) loaded — pick one, or choose Custom to type an id.`;
+    } else {
+      $('cloud-model-meta').textContent = note
+        || 'The provider returned no models. Choose Custom and type a model id.';
+    }
+  }
+
+  async function testTokenOnly() {
+    if (!currentCloud) {
+      setTokenStatus('error', 'Select a cloud provider first.');
+      return;
+    }
+    captureCloudDraft();
+    const pid = currentCloud;
+    const profile = profiles[pid] || {};
+    const token = (profile.api_key || '').trim();
+    const body = {
+      url: (profile.base_url || '').trim(),
+      model: (profile.model || '').trim(),
+    };
+    // An unsaved token is tested exactly as typed; a mask means "use stored".
+    if (token && token !== savedMasks[pid]) body.api_key = token;
+
+    const btn = $('test-token-btn');
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing…';
+    setTokenStatus('info', `Checking ${providerLabel(pid)} token…`);
+    try {
+      const result = await Chege.api(
+        '/providers/' + encodeURIComponent(pid) + '/test-token',
+        { method: 'POST', body: body },
+      );
+      const unsaved = Boolean(body.api_key);
+      if (result.token_valid) {
+        const suffix = unsaved ? ' Click Save as defaults to keep this token.' : '';
+        setTokenStatus('ok', (result.message || 'Token is valid.') + suffix);
+        populateCloudModels(pid, result.models || [], result.message);
+      } else {
+        setTokenStatus(result.status === 'warning' ? 'warning' : 'error',
+          result.message || 'Token could not be verified.');
+        if (Array.isArray(result.models) && result.models.length) {
+          populateCloudModels(pid, result.models, result.message);
+        }
+      }
+    } catch (e) {
+      setTokenStatus('error', e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  }
+
+  function renderCloudPanel(pid) {
+    resetTokenStatus();
+    setTokenVisible(false);
+    currentCloud = pid;
+    const entry = providerById(pid) || {};
+    const profile = baseProfile(pid);
+    $('cloud-provider-title').textContent = entry.label || pid;
+    $('cloud-provider-icon').className = 'fas ' + providerIcon(pid);
+    $('cloud_base_url').value = profile.base_url || entry.base_url || '';
+    $('cloud_base_url').placeholder = entry.base_url || 'https://api.example.com/v1';
+    $('cloud_model').value = profile.model || '';
+    $('cloud_model').placeholder = entry.default_model || 'Model id';
+    renderModelChoices(pid, profile.model || '');
+    $('cloud_api_key').value = profile.api_key || '';
+    $('cloud_api_key').placeholder = profile.api_key_set
+      ? 'Leave the masked token unchanged to keep it'
+      : "Paste this provider's API token";
+    $('cloud_max_tokens').value = profile.max_tokens ?? '';
+    $('cloud-base-help').textContent = entry.base_url
+      ? `Vendor default: ${entry.base_url}`
+      : 'Enter the base URL of your OpenAI-compatible gateway.';
+    $('cloud-provider-description').textContent = entry.description || '';
+    $('cloud-provider-saved').classList.toggle('d-none', !profile.api_key_set);
+    $('cloud-model-meta').textContent = modelCache[pid]?.length
+      ? `${modelCache[pid].length} model(s) loaded. Pick one from the dropdown, or choose Custom to type an id.`
+      : profile.api_key_set
+        ? 'Token saved. Click Test token to refresh the model list, or type a model id.'
+        : 'Paste the token above and click Test token to load this provider\'s models.';
+    const link = $('cloud-docs-link');
+    if (entry.docs_url) {
+      link.href = entry.docs_url;
+      link.classList.remove('d-none');
+    } else {
+      link.classList.add('d-none');
+    }
+  }
+
   function showProvider(provider) {
+    const cloud = isCloudProvider(provider);
+    resetDiagnostics();
+    if (currentCloud && currentCloud !== provider) captureCloudDraft();
     document.querySelectorAll('.chege-provider-panel').forEach((panel) => {
-      panel.classList.toggle('d-none', panel.dataset.provider !== provider);
+      const target = panel.dataset.provider === '__cloud__' ? cloud : panel.dataset.provider === provider;
+      panel.classList.toggle('d-none', !target);
     });
+    if (cloud) renderCloudPanel(provider);
+    else currentCloud = null;
     const badge = $('active-provider-badge');
-    if (badge) badge.textContent = 'Active: ' + provider;
+    if (badge) badge.textContent = 'Active: ' + (cloud ? providerLabel(provider) : provider);
   }
 
   function fill(settings, savedTo) {
@@ -35,6 +299,13 @@
       const el = $(key);
       if (el && settings[key] !== undefined && settings[key] !== null) el.value = settings[key];
     });
+    const cloudGroup = $('cloud-provider-options');
+    const clouds = providerCatalog.filter((p) => p.kind === 'cloud');
+    if (cloudGroup && clouds.length) {
+      cloudGroup.innerHTML = clouds.map((p) =>
+        `<option value="${Chege.escapeHtml(p.id)}">${Chege.escapeHtml(p.label)}</option>`).join('');
+    }
+
     $('default_provider').value = settings.default_provider || 'llama_cpp';
     $('sandbox_backend').value = settings.sandbox_backend || 'docker';
 
@@ -49,8 +320,25 @@
     if ($('llamacpp_ctx').value === '') $('llamacpp_ctx').value = 8192;
     if ($('ollama_num_ctx').value === '') $('ollama_num_ctx').value = 8192;
 
-    maskedApiKey = settings.openai_api_key || '';
-    $('openai_api_key').value = maskedApiKey;
+    // Build one persistent profile per cloud provider. The backend returns
+    // masked tokens, so an untouched field is echoed back and recognised as
+    // "keep the stored token".
+    const savedProfiles = settings.provider_configs || {};
+    profiles = {};
+    savedMasks = {};
+    providerCatalog.filter((p) => p.kind === 'cloud').forEach((entry) => {
+      const saved = savedProfiles[entry.id] || {};
+      savedMasks[entry.id] = saved.api_key || '';
+      profiles[entry.id] = {
+        base_url: saved.base_url ?? entry.base_url ?? '',
+        api_key: saved.api_key ?? '',
+        api_key_set: saved.api_key_set ?? Boolean(saved.api_key),
+        model: saved.model ?? entry.default_model ?? '',
+        max_tokens: saved.max_tokens ?? null,
+      };
+    });
+    dirtyProviders.clear();
+    currentCloud = null;
 
     showProvider($('default_provider').value);
 
@@ -80,11 +368,11 @@
   }
 
   function collect() {
+    captureCloudDraft();
     const payload = {
       default_provider: $('default_provider').value,
       llamacpp_url: $('llamacpp_url').value.trim(),
       ollama_url: $('ollama_url').value.trim(),
-      openai_base_url: $('openai_base_url').value.trim(),
       sandbox_backend: $('sandbox_backend').value,
       llamacpp_model: $('llamacpp_model').value.trim() || null,
       ollama_model: $('ollama_model').value.trim() || null,
@@ -96,13 +384,39 @@
       const n = Number(el.value);
       if (Number.isFinite(n)) payload[key] = n;
     });
-    const key = $('openai_api_key').value.trim();
-    if (key !== maskedApiKey) payload.openai_api_key = key || null;
+
+    // Only send provider profiles the operator actually touched. Untouched
+    // providers keep whatever is already stored (or inherited from env).
+    const configs = {};
+    dirtyProviders.forEach((pid) => {
+      const profile = profiles[pid];
+      if (!profile) return;
+      const config = {
+        base_url: (profile.base_url || '').trim(),
+        model: (profile.model || '').trim(),
+        max_tokens: profile.max_tokens,
+      };
+      const token = (profile.api_key || '').trim();
+      if (token) config.api_key = token;
+      else if (profile.api_key_set) config.api_key = '';
+      configs[pid] = config;
+    });
+    if (Object.keys(configs).length) payload.provider_configs = configs;
     return payload;
+  }
+
+  async function loadProviders() {
+    try {
+      const data = await Chege.api('/providers');
+      providerCatalog = data.providers || [];
+    } catch (_) {
+      providerCatalog = [];
+    }
   }
 
   async function load() {
     try {
+      if (!providerCatalog.length) await loadProviders();
       const settings = await Chege.api('/settings');
       fill(settings);
     } catch (e) {
@@ -127,25 +441,41 @@
   }
 
   async function testProvider(kind) {
-    const url = kind === 'llama_cpp' ? $('llamacpp_url').value.trim()
-      : kind === 'ollama' ? $('ollama_url').value.trim()
-      : $('openai_base_url').value.trim();
-    setResult('info', `Testing ${kind}…`);
-    try {
-      let result;
-      if (kind === 'llama_cpp') {
-        result = await Chege.api('/settings/test-llamacpp?url=' + encodeURIComponent(url));
-      } else if (kind === 'ollama') {
-        result = await Chege.api('/settings/test-ollama?url=' + encodeURIComponent(url));
-      } else {
-        result = await Chege.api('/providers/test', {
-          method: 'POST', body: { provider: 'openai', url: url },
-        });
+    resetDiagnostics();
+    let pid = kind;
+    let url = '';
+    const body = {};
+
+    if (kind === 'cloud') {
+      captureCloudDraft();
+      pid = currentCloud
+        || (isCloudProvider($('default_provider').value) ? $('default_provider').value : null);
+      if (!pid) {
+        setResult('error', 'Select a cloud provider to test.');
+        return;
       }
-      const status = result.status === 'ok' ? 'ok' : result.status === 'error' ? 'error' : 'info';
-      const message = result.message || result.error ||
-        `Connected. ${result.count != null ? result.count + ' model(s) found.' : 'Endpoint responded.'}`;
-      setResult(status, message);
+      const profile = profiles[pid] || {};
+      url = (profile.base_url || '').trim();
+      body.model = (profile.model || '').trim();
+      const token = (profile.api_key || '').trim();
+      // Send an unsaved token so Test works before pressing Save. Masked
+      // values are left to the backend, which resolves the stored token.
+      if (token && token !== savedMasks[pid]) body.api_key = token;
+    } else if (kind === 'llama_cpp') {
+      url = $('llamacpp_url').value.trim();
+    } else {
+      url = $('ollama_url').value.trim();
+    }
+
+    body.provider = pid;
+    body.url = url;
+    setResult('info', `Testing ${providerLabel(pid)} — endpoint, token and live model…`);
+    try {
+      const result = await Chege.api('/providers/test', { method: 'POST', body: body });
+      renderDiagnostics(result);
+      const status = result.status === 'ok' ? 'ok'
+        : result.status === 'warning' ? 'info' : 'error';
+      setResult(status, result.message || 'Test finished.');
     } catch (e) {
       setResult('error', e.message);
     }
@@ -153,15 +483,35 @@
 
   async function loadModels() {
     const provider = $('default_provider').value;
-    setResult('info', `Loading models from ${provider}…`);
+    const cloud = isCloudProvider(provider);
+    const label = cloud ? providerLabel(provider) : provider;
+    setResult('info', `Loading models from ${label}…`);
     try {
-      const result = await Chege.api('/settings/models?provider=' + encodeURIComponent(provider));
-      const models = result.models || [];
-      const names = models.slice(0, 12).map((m) => typeof m === 'string' ? m : (m.id || m.name || m.path || JSON.stringify(m)));
+      let models = [];
+      let message = '';
+      if (cloud) {
+        const result = await Chege.api('/providers/' + encodeURIComponent(provider) + '/models');
+        models = (result.models || []).map((m) =>
+          typeof m === 'string' ? m : (m.id || m.name || '')).filter(Boolean);
+        message = result.message || '';
+        if (provider === currentCloud) {
+          populateCloudModels(provider, models, message || undefined);
+          if (!models.length) {
+            $('cloud-model-meta').textContent = 'No models returned. Choose Custom and type a model id.';
+          }
+        }
+      } else {
+        const result = await Chege.api('/settings/models?provider=' + encodeURIComponent(provider));
+        models = result.models || [];
+      }
+      const names = models.slice(0, 20).map((m) =>
+        typeof m === 'string' ? m : (m.id || m.name || m.path || JSON.stringify(m)));
       $('model-list').textContent = names.length
-        ? 'Models: ' + names.join(', ') + (models.length > 12 ? ` … (+${models.length - 12})` : '')
-        : 'Provider returned no models.';
-      setResult(models.length ? 'ok' : 'info', models.length ? `Found ${models.length} model(s).` : 'No models found.');
+        ? 'Models: ' + names.join(', ') + (models.length > 20 ? ` … (+${models.length - 20})` : '')
+        : 'Provider returned no models. Test the token first, then retry.';
+      setResult(models.length ? 'ok' : 'info', models.length
+        ? `Found ${models.length} model(s) on ${label}.`
+        : (message || `No models found on ${label}.`));
     } catch (e) {
       $('model-list').textContent = '';
       setResult('error', e.message);
@@ -347,7 +697,49 @@
     $('clear-defaults').addEventListener('click', clearDefaults);
     $('test-llamacpp').addEventListener('click', () => testProvider('llama_cpp'));
     $('test-ollama').addEventListener('click', () => testProvider('ollama'));
-    $('test-openai').addEventListener('click', () => testProvider('openai'));
+    $('test-cloud').addEventListener('click', () => testProvider('cloud'));
+    $('test-token-btn').addEventListener('click', testTokenOnly);
+    $('toggle-token-visibility').addEventListener('click', () => {
+      setTokenVisible($('cloud_api_key').type === 'password');
+    });
+    $('cloud_api_key').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        testTokenOnly();
+      }
+    });
+    ['cloud_base_url', 'cloud_api_key'].forEach((id) => {
+      $(id).addEventListener('input', () => {
+        if (currentCloud) dirtyProviders.add(currentCloud);
+        resetTokenStatus();
+      });
+    });
+    $('cloud_model_select').addEventListener('change', (event) => {
+      if (!currentCloud) return;
+      const value = event.target.value;
+      const input = $('cloud_model');
+      if (value === '__custom__') {
+        input.classList.remove('d-none');
+        input.focus();
+        return;
+      }
+      input.value = value;
+      input.classList.add('d-none');
+      dirtyProviders.add(currentCloud);
+    });
+    $('cloud_model').addEventListener('input', () => {
+      if (!currentCloud) return;
+      dirtyProviders.add(currentCloud);
+      const value = $('cloud_model').value.trim();
+      const select = $('cloud_model_select');
+      const values = Array.from(select.options)
+        .map((option) => option.value)
+        .filter((item) => item && item !== '__custom__');
+      select.value = values.includes(value) ? value : '__custom__';
+    });
+    $('cloud_max_tokens').addEventListener('input', () => {
+      if (currentCloud) dirtyProviders.add(currentCloud);
+    });
     $('load-models').addEventListener('click', loadModels);
     $('settings-gguf-download').addEventListener('click', startCustomDownload);
     $('refresh-catalog').addEventListener('click', () => { loadModelChoices(); loadCatalog(); });

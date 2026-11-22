@@ -27,7 +27,7 @@ Chege Agent executes code and runs automated tools on behalf of a single local o
 - The canonical local URL is http://127.0.0.1:8001/; the service binds to `127.0.0.1` and has no in-app authentication. Network-level access control (firewall, SSH tunnel) is the operator's responsibility.
 - REST is `/api/v1/*` only. Health endpoints are `/healthz` and `/readyz`; Swagger UI is `/docs` and OpenAPI JSON is at `/api/v1/openapi.json`. Static pages are `/`, `/app`, `/guide`, `/setup`, `/api`, `/security`, `/status`, `/models`, `/tools`, `/settings`.
 - Approvals default to `auto_edit` (`ask_all` and `full_auto` are selectable per run, but never bypass tool governance), with automatic checkpoints before every run.
-- Deploy only with `bash scripts/deploy.sh --isolated`, which recreates only `chege-local-agent` and never touches unrelated containers.
+- Deploy only with `bash scripts/deploy.sh --isolated`, which recreates only `chege-agent-local-web` and never touches unrelated containers.
 
 ---
 
@@ -45,7 +45,7 @@ Chege Agent executes code and runs automated tools on behalf of a single local o
 Chege Agent does **never** mount `/var/run/docker.sock` directly into the agent container. Instead, the socket is mounted into an isolated proxy:
 
 ```yaml
-chege-docker-proxy:
+chege-agent-docker-proxy:
   image: tecnativa/docker-socket-proxy:latest
   environment:
     - CONTAINERS=1    # Allow creating/stopping workspace containers

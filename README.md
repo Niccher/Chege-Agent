@@ -74,12 +74,12 @@ cd "Chege Agent"
 bash scripts/deploy.sh --isolated
 ```
 
-`--isolated` is the supported local deploy path: it recreates **only** `chege-local-agent` and never touches unrelated containers. The script syncs `.env`, validates Compose, builds the app and sandbox images, starts the stack on loopback, waits for `/healthz`, and prints all URLs. It never publishes infrastructure ports or changes your Git checkout. The app is then at **http://127.0.0.1:8001/**.
+`--isolated` is the supported local deploy path: it recreates **only** `chege-agent-local-web` and never touches unrelated containers. The script syncs `.env`, validates Compose, builds the app and sandbox images, starts the stack on loopback, waits for `/healthz`, and prints all URLs. It never publishes infrastructure ports or changes your Git checkout. The app is then at **http://127.0.0.1:8001/**.
 
 Common variants (`--isolated` remains the supported local path):
 
 ```bash
-bash scripts/deploy.sh --isolated         # supported local deploy: only chege-local-agent
+bash scripts/deploy.sh --isolated         # supported local deploy: only chege-agent-local-web
 bash scripts/deploy.sh --with-postgres    # internal Postgres, port 5432 NOT published
 bash scripts/deploy.sh --with-ollama      # switch provider to host Ollama on :11434
 bash scripts/deploy.sh --local-sandbox    # explicit local execution, no isolation
@@ -101,7 +101,21 @@ If this machine already runs other Docker stacks (or an older Chege stack in the
 bash scripts/deploy.sh --isolated
 ```
 
-This uses `docker-compose.isolated.yml` and `COMPOSE_PROJECT_NAME=chege-local`, recreating **only** `chege-local-agent` on a private network (`chege-local_chege-net`). It never passes `--remove-orphans`, so existing containers are not stopped, recreated, or removed. On this machine the app is at `http://127.0.0.1:8001/`.
+This uses `docker-compose.isolated.yml` and `COMPOSE_PROJECT_NAME=chege-agent-local`, recreating **only** `chege-agent-local-web` on a private network (`chege-agent-local_chege-net`). It never passes `--remove-orphans`, so existing containers are not stopped, recreated, or removed. On this machine the app is at `http://127.0.0.1:8001/`.
+
+### Docker resource names
+
+| Resource | Normal | Isolated |
+|---|---|---|
+| Compose project | `chege-agent` | `chege-agent-local` |
+| Web/API container | `chege-agent-web` | `chege-agent-local-web` |
+| Docker proxy container | `chege-agent-docker-proxy` | `chege-agent-local-docker-proxy` |
+| Postgres container | `chege-agent-postgres` | `chege-agent-local-postgres` |
+| Sandbox container | `chege-agent-sandbox-<slug>` | `chege-agent-local-sandbox-<slug>` |
+| Network | `chege-agent_chege-net` | `chege-agent-local_chege-net` |
+| App image | `chege-agent-web:0.2.0` | `chege-agent-web:0.2.0` |
+| Sandbox image | `chege-agent-sandbox-polyglot:latest` | `chege-agent-sandbox-polyglot:latest` |
+| Postgres volume | `chege-agent-postgres-data` | `chege-agent-local-postgres-data` |
 
 Manual Compose (`docker compose up --build -d`) still works, but the deploy script is the supported path.
 
@@ -146,20 +160,21 @@ Only versioned routes exist: **`/api/v1/*`**. Unversioned `/api/*` aliases and `
 | `CHEGE_LLAMACPP_CTX` | `8192` | llama-server context (`n_ctx`); separate from the agent-side budget and requires `bash scripts/llamacpp.sh restart` to change. |
 | `CHEGE_SANDBOX_BACKEND` | `docker` | `docker` (isolated) or `local` (explicit opt-in). |
 | `CHEGE_DOCKER_SOCKET_PROXY` | `tcp://docker-socket-proxy:2375` | Restricted Docker API endpoint. |
-| `CHEGE_DEFAULT_SANDBOX_IMAGE` | `chege-sandbox-polyglot:latest` | Built from `sandbox/Dockerfile` by deploy.sh. |
-| `CHEGE_DEFAULT_PROVIDER` | `llama_cpp` | `llama_cpp` (default), `ollama` or `openai`. |
+| `CHEGE_DEFAULT_SANDBOX_IMAGE` | `chege-agent-sandbox-polyglot:latest` | Built from `sandbox/Dockerfile` by deploy.sh. |
+| `CHEGE_SANDBOX_CONTAINER_PREFIX` | `chege-agent-sandbox` | Prefix for per-project sandbox containers (`chege-agent-sandbox-<slug>`; isolated uses `chege-agent-local-sandbox`). |
+| `CHEGE_DEFAULT_PROVIDER` | `llama_cpp` | `llama_cpp`, `ollama`, or a cloud id from the provider catalog (`openai`, `deepseek`, `gemini`, `grok`, `anthropic`, `mistral`, `groq`, `openrouter`, `together`, `perplexity`, `custom`). |
 | `CHEGE_LLAMACPP_URL` | `http://host.docker.internal:8080/v1` | llama.cpp endpoint. |
 | `CHEGE_LLAMACPP_MODEL` | empty | Local `.gguf` path used by `scripts/llamacpp.sh`; empty = download Qwen2.5-1.5B. |
 | `CHEGE_LLAMACPP_VERSION` | `b12359` | Official precompiled llama.cpp release tag. |
 | `CHEGE_LLAMACPP_HOST` / `_PORT` | `0.0.0.0` / `8080` | llama-server bind address/port (must be reachable from Docker). |
 | `CHEGE_OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama endpoint. |
-| `CHEGE_OPENAI_API_KEY` | empty | Only for OpenAI-compatible providers. |
+| `CHEGE_OPENAI_API_KEY` | empty | Legacy fallback for the OpenAI profile. Cloud providers can also read `CHEGE_DEEPSEEK_API_KEY`, `CHEGE_GEMINI_API_KEY`, `CHEGE_GROK_API_KEY`, `CHEGE_ANTHROPIC_API_KEY`, `CHEGE_MISTRAL_API_KEY`, `CHEGE_GROQ_API_KEY`, `CHEGE_OPENROUTER_API_KEY`, `CHEGE_TOGETHER_API_KEY` and `CHEGE_PERPLEXITY_API_KEY`. |
 
 Full reference: [docs/user/configuration.md](docs/user/configuration.md).
 
 ### Settings console
 
-The [Settings console](/settings) is the single place to change runtime defaults: theme (stored only in this browser as `lte-theme`), sandbox backend, provider endpoints/API key, and agent limits. Every control has a plain-language tooltip (25 total) shown on hover. Provider panels switch between `llama_cpp`, `ollama` and `openai` based on `default_provider`; only the selected runner's settings are used, though the Playground can still override the provider for a run. Fields include `default_temperature` (0.2), `default_top_p` (0.9), `default_context_window` (8192), `max_steps` (50), `run_timeout_seconds` (600), `provider_timeout_seconds` (120), a read-only `sandbox_backend` (`docker`), the llama.cpp/Ollama/OpenAI-compatible endpoints and models, and a masked OpenAI API key. The UI labels which controls require a restart: llama-server knobs (`llamacpp_ctx`, `llamacpp_model`, host/port, `n_gpu_layers`) take effect only after `bash scripts/llamacpp.sh restart`.
+The [Settings console](/settings) is the single place to change runtime defaults: theme (stored only in this browser as `lte-theme`), sandbox backend, provider endpoints/tokens, and agent limits. Every control has a plain-language tooltip shown on hover. The provider picker lists the local runners (`llama_cpp`, `ollama`) plus named cloud providers — OpenAI, DeepSeek, Google Gemini, xAI Grok, Anthropic Claude, Mistral, Groq, OpenRouter, Together AI, Perplexity and a custom OpenAI-compatible endpoint. Each cloud provider has its **own** endpoint, default model and auth token, stored per provider in `data/settings.json` (mode `0600`) and always masked in API responses. Only the selected runner is used for new runs, though the Playground can still override the provider per run. Fields include `default_temperature` (0.2), `default_top_p` (0.9), `default_context_window` (8192), `max_steps` (50), `run_timeout_seconds` (600), `provider_timeout_seconds` (120), a read-only `sandbox_backend` (`docker`), the llama.cpp/Ollama endpoints and models, and per-provider cloud profiles. The UI labels which controls require a restart: llama-server knobs (`llamacpp_ctx`, `llamacpp_model`, host/port, `n_gpu_layers`) take effect only after `bash scripts/llamacpp.sh restart`.
 
 It exposes three save modes:
 
@@ -169,7 +184,7 @@ It exposes three save modes:
 | Save as defaults | `PUT /api/v1/settings/defaults` | Applies now **and** persists to `data/settings.json` |
 | Clear saved defaults | `DELETE /api/v1/settings/defaults` | Clears saved defaults; runtime values remain until restart |
 
-`GET /api/v1/settings` returns the masked current settings. Persisted defaults are loaded after env/`.env` on startup, so they win over those values. The file is written atomically with `0600` permissions; the OpenAI API key is masked and never echoed back. Host, port and database binding are deploy-time values and are intentionally excluded — change those in `.env` and redeploy with `bash scripts/deploy.sh --isolated`.
+`GET /api/v1/settings` returns the masked current settings, including a `provider_configs` entry per cloud provider. Persisted defaults are loaded after env/`.env` on startup, so they win over those values. The file is written atomically with `0600` permissions; every provider token is masked and never echoed back. `PUT /api/v1/providers/{id}` saves one provider profile, `DELETE /api/v1/providers/{id}/config` clears it, `POST /api/v1/providers/{id}/test-token` validates just the token, and `POST /api/v1/providers/test` runs end-to-end diagnostics: it checks the endpoint, token source/mask, `/models`, and a tiny live chat completion, returning per-check status, HTTP codes and latency. The Settings console has an inline **Test token** button beside the token field — on success it fills a **model dropdown** from `/models` (with vendor-native fallbacks and curated suggestions) while keeping a **Custom** option so any model id can still be typed. A **Run full diagnostics** checklist is also available. Host, port and database binding are deploy-time values and are intentionally excluded — change those in `.env` and redeploy with `bash scripts/deploy.sh --isolated`.
 
 ### Model manager
 

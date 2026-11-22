@@ -29,6 +29,15 @@ class UpdateTodoRequest(BaseModel):
 
 @router.get("/by-project/{project_slug}")
 def list_project_sessions(project_slug: str, db: Session = Depends(get_db_session)):
+    """List all chat sessions associated with a specific project slug.
+
+    Args:
+        project_slug: The unique identifier slug of the project.
+        db: Active database session dependency.
+
+    Returns:
+        dict: List of session records ordered from newest to oldest.
+    """
     project = db.exec(select(Project).where(Project.slug == project_slug)).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -43,6 +52,16 @@ def list_project_sessions(project_slug: str, db: Session = Depends(get_db_sessio
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_session(request: CreateSessionRequest, response: Response, db: Session = Depends(get_db_session)):
+    """Create a new conversational thread within a project.
+
+    Args:
+        request: Project slug and optional title for the new session.
+        response: FastAPI Response object for Location header.
+        db: Active database session dependency.
+
+    Returns:
+        dict: The created session record.
+    """
     project = db.exec(select(Project).where(Project.slug == request.project_slug)).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -61,7 +80,16 @@ def delete_session(
     confirm: str = Query(..., description="Type the exact session ID to confirm deletion"),
     db: Session = Depends(get_db_session),
 ):
-    """Delete one thread and its messages/runs/events. The workspace is kept."""
+    """Delete one thread and its messages/runs/events while preserving the workspace.
+
+    Args:
+        session_id: The unique ID of the session to delete.
+        confirm: Confirmation string that must match session_id.
+        db: Active database session dependency.
+
+    Returns:
+        dict: Deletion confirmation and counts of cascaded records removed.
+    """
     session_rec = db.get(DBSession, session_id)
     if not session_rec:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -81,6 +109,15 @@ def delete_session(
 
 @router.get("/{session_id}")
 def get_session(session_id: str, db: Session = Depends(get_db_session)):
+    """Fetch session details, chronological message history, and active todo list.
+
+    Args:
+        session_id: Unique UUID of the session.
+        db: Active database session dependency.
+
+    Returns:
+        dict: Session metadata, ordered list of messages, and parsed todo items.
+    """
     session_rec = db.get(DBSession, session_id)
     if not session_rec:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -107,6 +144,17 @@ def get_session(session_id: str, db: Session = Depends(get_db_session)):
 def fork_session(
     session_id: str, request: ForkSessionRequest, response: Response, db: Session = Depends(get_db_session)
 ):
+    """Fork an existing thread up to an optional message ID into a new session.
+
+    Args:
+        session_id: Origin session to fork from.
+        request: New session title and boundary message ID.
+        response: FastAPI Response object for Location header.
+        db: Active database session dependency.
+
+    Returns:
+        dict: The newly created forked session record and message copy count.
+    """
     orig_session = db.get(DBSession, session_id)
     if not orig_session:
         raise HTTPException(status_code=404, detail="Original session not found")
@@ -153,6 +201,16 @@ def fork_session(
 
 @router.post("/{session_id}/todos")
 def update_session_todos(session_id: str, request: UpdateTodoRequest, db: Session = Depends(get_db_session)):
+    """Update the persisted todo items list for a specific thread.
+
+    Args:
+        session_id: Unique UUID of the session.
+        request: Structured list of updated todo item objects.
+        db: Active database session dependency.
+
+    Returns:
+        dict: Status confirming update.
+    """
     session_rec = db.get(DBSession, session_id)
     if not session_rec:
         raise HTTPException(status_code=404, detail="Session not found")

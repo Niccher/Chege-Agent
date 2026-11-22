@@ -1,7 +1,43 @@
+import ipaddress
 import re
+import socket
+from urllib.parse import urljoin, urlparse
 import httpx
 from pydantic import BaseModel, Field
 from backend.app.tools.base import BaseTool, RiskLevel, ToolContext, ToolResult
+
+BLOCKED_HOSTNAMES = {"localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254", "::1", "metadata.google.internal"}
+
+
+def is_safe_url(url: str) -> tuple[bool, str]:
+    """Validate that a URL uses http/https and does not resolve to private/local/metadata IPs."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False, "URL must begin with http:// or https://"
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        return False, "URL missing hostname"
+    if hostname in BLOCKED_HOSTNAMES:
+        return False, f"Access to blocked host '{hostname}' is prohibited"
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return False, f"Access to private/local network IP '{hostname}' is prohibited"
+    except ValueError:
+        try:
+            addr_infos = socket.getaddrinfo(hostname, None)
+            for _, _, _, _, sockaddr in addr_infos:
+                ip_str = sockaddr[0]
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                    return False, f"Hostname '{hostname}' resolves to private/local network IP '{ip_str}'"
+        except socket.gaierror as e:
+            return False, f"Could not resolve hostname '{hostname}': {e}"
+        except Exception as e:
+            return False, f"Failed address validation for '{hostname}': {e}"
+
+    return True, ""
 
 
 class WebFetchInput(BaseModel):
@@ -30,28 +66,34 @@ class WebFetchTool(BaseTool):
         return clean.strip()
 
     async def run(self, ctx: ToolContext, args: WebFetchInput) -> ToolResult:
-        if not args.url.startswith(("http://", "https://")):
-            return ToolResult(content="ERROR: URL must begin with http:// or https://", is_error=True)
+        safe, reason = is_safe_url(args.url)
+        if not safe:
+            return ToolResult(content=f"ERROR: {reason}.", is_error=True)
 
-        from urllib.parse import urlparse
-        parsed = urlparse(args.url)
-        hostname = (parsed.hostname or "").lower()
-        blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254", "::1", "metadata.google.internal"}
-        if (
-            hostname in blocked_hosts
-            or hostname.startswith("127.")
-            or hostname.startswith("10.")
-            or hostname.startswith("192.168.")
-        ):
-            return ToolResult(content=f"ERROR: Access to private network/internal host '{hostname}' is blocked for security.", is_error=True)
-
-
+        current_url = args.url
+        headers = {"User-Agent": "ChegeAgent/0.2.0 (+https://github.com/chege-agent)"}
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-                headers = {"User-Agent": "ChegeAgent/0.2.0 (+https://github.com/chege-agent)"}
-                resp = await client.get(args.url, headers=headers)
+            async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+                resp = None
+                for _ in range(5):
+                    resp = await client.get(current_url, headers=headers)
+                    if resp.is_redirect:
+                        loc = resp.headers.get("Location")
+                        if not loc:
+                            break
+                        redirect_url = urljoin(current_url, loc)
+                        safe, reason = is_safe_url(redirect_url)
+                        if not safe:
+                            return ToolResult(content=f"ERROR: Redirect blocked: {reason}.", is_error=True)
+                        current_url = redirect_url
+                    else:
+                        break
+
+                if resp is None:
+                    return ToolResult(content=f"ERROR: No response received from '{args.url}'", is_error=True)
+
                 if resp.status_code >= 400:
-                    return ToolResult(content=f"ERROR: HTTP {resp.status_code} fetching '{args.url}'", is_error=True)
+                    return ToolResult(content=f"ERROR: HTTP {resp.status_code} fetching '{current_url}'", is_error=True)
 
                 raw_text = resp.text
                 clean_text = self._html_to_clean_text(raw_text)

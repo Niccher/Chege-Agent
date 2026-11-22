@@ -55,14 +55,35 @@ def control_base(settings: Settings) -> str:
     return (settings.llamacpp_control_url or "http://host.docker.internal:8081").rstrip("/")
 
 
+import ipaddress
+import socket
+
+BLOCKED_MODEL_HOSTS = {"169.254.169.254", "metadata.google.internal", "localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
 def validate_url(url: str) -> str:
     url = url.strip()
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
     if parsed.scheme not in ("http", "https") or not host:
         raise HTTPException(400, detail="URL must begin with http:// or https://")
-    if host in METADATA_HOSTS:
-        raise HTTPException(400, detail="Cloud metadata URLs are not allowed")
+    if host in BLOCKED_MODEL_HOSTS:
+        raise HTTPException(400, detail="Cloud metadata and loopback URLs are not allowed")
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise HTTPException(400, detail=f"Access to private/local network IP '{host}' is prohibited")
+    except ValueError:
+        try:
+            addr_infos = socket.getaddrinfo(host, None)
+            for _, _, _, _, sockaddr in addr_infos:
+                ip_str = sockaddr[0]
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                    raise HTTPException(400, detail=f"Host '{host}' resolves to private/local network IP '{ip_str}'")
+        except socket.gaierror:
+            pass
     return url
 
 
@@ -238,8 +259,8 @@ async def list_llamacpp_models(settings: Settings = Depends(get_settings)):
 @router.post("/llamacpp/download")
 async def download_llamacpp_model(request: DownloadRequest, settings: Settings = Depends(get_settings)):
     """Stream a GGUF download from the host control service as SSE."""
-    url = validate_url(request.url)
     hf_token = clean_hf_token(request.hf_token)
+    url = validate_url(request.url)
 
     async def events():
         yield sse({"status": "starting", "message": f"Downloading {url}…"})

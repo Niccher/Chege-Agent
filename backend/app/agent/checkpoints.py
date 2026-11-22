@@ -11,8 +11,26 @@ class CheckpointManager:
     """Manages git-based workspace checkpoints and undo/revert actions (RT-04)."""
 
     @staticmethod
+    def is_git_workspace(workspace_root: Path) -> bool:
+        """Check if workspace_root is inside an initialized Git repository."""
+        try:
+            res = subprocess.run(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=workspace_root,
+                capture_output=True,
+                text=True,
+            )
+            return res.returncode == 0 and res.stdout.strip() == "true"
+        except Exception:
+            return False
+
+    @staticmethod
     def create_checkpoint(workspace_root: Path, run_id: str, project_id: str, db: Session) -> str | None:
         """Create a git checkpoint commit before a run begins."""
+        if not CheckpointManager.is_git_workspace(workspace_root):
+            logger.debug(f"Skipping checkpoint creation: '{workspace_root}' is not an initialized Git repository.")
+            return None
+
         try:
             # Stage everything temporarily to get a commit SHA
             subprocess.run(["git", "add", "."], cwd=workspace_root, capture_output=True)
@@ -63,6 +81,10 @@ class CheckpointManager:
         Dirty work is first pushed to a safety stash so a revert never destroys
         unrelated uncommitted changes.
         """
+        if not CheckpointManager.is_git_workspace(workspace_root):
+            logger.error(f"Cannot revert: '{workspace_root}' is not an initialized Git repository.")
+            return False
+
         try:
             status = subprocess.run(
                 ["git", "status", "--porcelain"],
@@ -80,7 +102,7 @@ class CheckpointManager:
                 logger.info("Saved dirty workspace to a safety stash before revert.")
 
             res = subprocess.run(
-                ["git", "reset", "--hard", git_ref],
+                ["git", "reset", "--hard", "--", git_ref],
                 cwd=workspace_root,
                 capture_output=True,
                 text=True,

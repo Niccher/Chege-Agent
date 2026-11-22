@@ -12,9 +12,9 @@ cd "Chege Agent"
 bash scripts/deploy.sh --isolated
 ```
 
-`--isolated` is the supported deploy command. It checks Docker/Compose, syncs `.env`, validates Compose files, builds the app + sandbox images, starts the stack bound to `127.0.0.1:8001`, waits for `/healthz`, and prints URLs and SSH-tunnel instructions. It sets `COMPOSE_PROJECT_NAME=chege-local`, so the services are `chege-local-agent` and `chege-local-proxy` on the private `chege-local_chege-net` network.
+`--isolated` is the supported deploy command. It checks Docker/Compose, syncs `.env`, validates Compose files, builds the app + sandbox images, starts the stack bound to `127.0.0.1:8001`, waits for `/healthz`, and prints URLs and SSH-tunnel instructions. It sets `COMPOSE_PROJECT_NAME=chege-agent-local`, so the services are `chege-agent-local-web` and `chege-agent-local-docker-proxy` on the private `chege-agent-local_chege-net` network.
 
-**Isolation guarantee:** an isolated deploy recreates **only** `chege-local-agent`. It never passes `--remove-orphans`, so unrelated containers are never stopped, recreated, or removed. All `--with-*` flags still work.
+**Isolation guarantee:** an isolated deploy recreates **only** `chege-agent-local-web`. It never passes `--remove-orphans`, so unrelated containers are never stopped, recreated, or removed. All `--with-*` flags still work.
 
 Useful flags and subcommands (add `--isolated` when deploying):
 
@@ -26,7 +26,7 @@ bash scripts/deploy.sh --isolated --local-sandbox    # explicit no-isolation exe
 bash scripts/deploy.sh --isolated --hard-reset       # recreate the isolated app container
 bash scripts/deploy.sh doctor                        # preflight only
 bash scripts/deploy.sh status                        # container status
-bash scripts/deploy.sh logs chege-local-agent        # follow logs
+bash scripts/deploy.sh logs chege-agent-local-web        # follow logs
 bash scripts/deploy.sh stop                          # stop, preserve data
 ```
 
@@ -44,7 +44,7 @@ curl -i http://127.0.0.1:8001/readyz
 # {"status":"ready"}
 ```
 
-Expected Compose services in the isolated project: `chege-local-agent` and `chege-local-proxy` (plus `postgres` when `--with-postgres` is used). The canonical local URL is `http://127.0.0.1:8001/`; Swagger UI is at `/docs` and the OpenAPI JSON at `/api/v1/openapi.json`.
+Expected Compose services in the isolated project: `chege-agent-local-web` and `chege-agent-local-docker-proxy` (plus `chege-agent-local-postgres` when `--with-postgres` is used). The canonical local URL is `http://127.0.0.1:8001/`; Swagger UI is at `/docs` and the OpenAPI JSON at `/api/v1/openapi.json`.
 
 ---
 
@@ -105,7 +105,7 @@ Chat messages show their timestamp; completed assistant messages also show durat
 ```bash
 bash scripts/deploy.sh stop                       # stop, preserve data
 bash scripts/deploy.sh restart                    # restart the isolated stack
-bash scripts/deploy.sh logs -f chege-local-agent  # follow app logs
+bash scripts/deploy.sh logs -f chege-agent-local-web  # follow app logs
 ```
 
 Persistent host directories:

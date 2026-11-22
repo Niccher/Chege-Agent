@@ -627,6 +627,7 @@
     };
     Object.keys(handlers).forEach((type) => {
       es.addEventListener(type, (event) => {
+        state.reconnectAttempts = 0;
         if (event.lastEventId) {
           state.lastSeq = Number(event.lastEventId);
           saveResume();
@@ -636,7 +637,16 @@
         handlers[type](data);
       });
     });
-    es.onerror = () => setStatus('Stream interrupted — reconnecting…', 'warn');
+    es.onerror = () => {
+      state.reconnectAttempts = (state.reconnectAttempts || 0) + 1;
+      if (state.reconnectAttempts > 5) {
+        closeStream();
+        setStatus('Stream disconnected', 'bad');
+        Chege.alertBox('Stream connection lost after multiple retry attempts. Check server status.', 'warning');
+      } else {
+        setStatus(`Stream interrupted — reconnecting (${state.reconnectAttempts}/5)…`, 'warn');
+      }
+    };
   }
 
   function finishRun(label, kind) {
@@ -852,9 +862,11 @@
     try {
       const data = await Chege.api('/providers');
       state.providers = data.providers || [];
-      $('provider-select').innerHTML = '<option value="">Default (' + esc(data.active_provider || '') + ')</option>'
-        + state.providers.map((p) => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
-      $('provider-health').textContent = state.providers.map((p) => `${p.name}: ${p.status || 'unknown'}`).join(' · ');
+      const activeEntry = state.providers.find((p) => p.name === data.active_provider);
+      $('provider-select').innerHTML = '<option value="">Default (' + esc(activeEntry?.label || data.active_provider || '') + ')</option>'
+        + state.providers.map((p) => `<option value="${esc(p.name)}">${esc(p.label || p.name)}</option>`).join('');
+      $('provider-health').textContent = state.providers.map((p) =>
+        `${p.label || p.name}${p.kind === 'cloud' && !p.api_key_set ? ' (no token)' : ''}`).join(' · ');
       await loadModelsForProvider();
     } catch (e) { Chege.alertBox(e.message, 'danger'); }
   }
@@ -873,7 +885,14 @@
       } else if (provider === 'llama_cpp') {
         names = (data.llamacpp?.models || []).map((m) => m.path || m.name);
       } else {
-        names = ['gpt-4o-mini'];
+        const entry = state.providers.find((p) => p.name === provider);
+        names = entry?.model ? [entry.model] : [];
+        try {
+          const live = await Chege.api('/providers/' + encodeURIComponent(provider) + '/models');
+          names = (live.models || []).map((m) => m.id || m.name).filter(Boolean);
+        } catch (_) {}
+        if (!names.length && entry?.default_model) names = [entry.default_model];
+        if (!names.length) names = [previous || 'gpt-4o-mini'];
       }
       if (selected && !names.includes(selected)) names.unshift(selected);
       if (!names.length) names = [previous || 'qwen2.5-coder:latest'];

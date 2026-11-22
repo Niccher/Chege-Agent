@@ -6,7 +6,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: chege-postgres
+    container_name: ${CHEGE_POSTGRES_CONTAINER_NAME:-chege-agent-postgres}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-chege}
       POSTGRES_USER: ${POSTGRES_USER:-chege}
@@ -33,3 +33,4 @@ services:
 
 volumes:
   chege_pgdata:
+    name: ${CHEGE_POSTGRES_VOLUME_NAME:-chege-agent-postgres-data}

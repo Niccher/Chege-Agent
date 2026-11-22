@@ -9,7 +9,7 @@ This directory documents the architecture, contracts and operations of **Chege A
 | Area | Implementation |
 |---|---|
 | Runtime | Personal, local-only service. No auth, users or tenants. `127.0.0.1` bind and loopback Compose port are part of the security boundary. Canonical local URL: **http://127.0.0.1:8001/**. |
-| Deployment | Deploy with `bash scripts/deploy.sh --isolated`; it recreates only `chege-local-agent` and never touches unrelated containers. Manual Compose remains available. |
+| Deployment | Deploy with `bash scripts/deploy.sh --isolated`; it recreates only `chege-agent-local-web` and never touches unrelated containers. Manual Compose remains available. |
 | UI | AdminLTE 4.10.2 layout with locally vendored assets. Shipped pages: `/`, `/app`, `/guide`, `/setup`, `/api`, `/security`, `/status`, `/tools`, `/settings`, `/models`; Swagger stays at `/docs`. |
 | REST | `/api/v1/*` only. Legacy `/api/*` aliases removed. `201 + Location` on creates, `202 + Location` on runs, `409` for duplicates. |
 | Approvals | Default `auto_edit` with exact-argv command allowlisting; destructive tools stay gated. `ask_all` and `full_auto` are selectable per run; governance (disabled tools and `prompt_once` grants) always applies, even in `full_auto`. |

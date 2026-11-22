@@ -65,7 +65,11 @@ class EditFileTool(BaseTool):
         else:
             new_content = content.replace(args.old_str, args.new_str, 1)
 
-        full_path.write_text(new_content, encoding="utf-8")
+        try:
+            full_path.write_text(new_content, encoding="utf-8")
+        except OSError as e:
+            return ToolResult(content=f"ERROR writing to '{args.path}': {e}", is_error=True)
+
         return ToolResult(
             content=f"OK: Successfully replaced {occurrences} occurrence(s) in '{args.path}'.",
             files_changed=[args.path],
@@ -152,8 +156,18 @@ class WriteFileTool(BaseTool):
         except Exception as e:
             return ToolResult(content=f"ERROR: {str(e)}", is_error=True)
 
-        full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.write_text(args.content, encoding="utf-8")
+        if full_path.exists() and full_path.is_dir():
+            return ToolResult(
+                content=f"ERROR: Cannot write to '{args.path}' — target path is an existing directory, not a file.",
+                is_error=True,
+            )
+
+        try:
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_text(args.content, encoding="utf-8")
+        except OSError as e:
+            return ToolResult(content=f"ERROR writing to '{args.path}': {e}", is_error=True)
+
         return ToolResult(
             content=f"OK: Written {len(args.content)} characters to '{args.path}'.",
             files_changed=[args.path],

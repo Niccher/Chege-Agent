@@ -24,7 +24,12 @@ class ApprovalEngine:
     ``pytest ; cat ~/.env``.
     """
 
-    # Exact argv tuples only — extra flags require explicit approval.
+    # Architectural & Security Rationale:
+    # We require exact argv tuples without arbitrary arguments or subcommands.
+    # In CLI tooling, flags such as `--config`, `-o`, `--exec`, or `-c` can be leveraged
+    # to achieve arbitrary code execution (e.g. pytest `-o python_files=...` or git `--exec-path`).
+    # By strictly matching exact argv tuples (e.g. ("git", "status") rather than prefix "git"),
+    # we guarantee that unintended flag injections or shell escapes cannot bypass the human approval gate.
     _SAFE_ARGV = {
         ("pytest",),
         ("python", "-m", "unittest"),

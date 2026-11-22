@@ -153,13 +153,36 @@ def safe_filename(value: str) -> str:
     return name
 
 
+import ipaddress
+import socket
+
+BLOCKED_HOSTS = {"169.254.169.254", "metadata.google.internal", "localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
 def validate_download_url(url: str) -> str:
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
     if parsed.scheme not in ("http", "https") or not host:
         raise ValueError("URL must begin with http:// or https://")
-    if host in ("169.254.169.254", "metadata.google.internal", "localhost", "127.0.0.1", "::1"):
+    if host in BLOCKED_HOSTS:
         raise ValueError("That URL host is not allowed")
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise ValueError(f"Access to private/local network IP '{host}' is prohibited")
+    except ValueError as e:
+        if "prohibited" in str(e):
+            raise
+        try:
+            addr_infos = socket.getaddrinfo(host, None)
+            for _, _, _, _, sockaddr in addr_infos:
+                ip_str = sockaddr[0]
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                    raise ValueError(f"Host '{host}' resolves to private/local network IP '{ip_str}'")
+        except socket.gaierror:
+            pass
     return url
 
 
@@ -301,7 +324,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         try:
-            cmd = ["curl", "-fSL", "--retry", "2", "--max-time", str(DOWNLOAD_TIMEOUT),
+            cmd = ["curl", "-fSL", "--proto", "=http,https", "--retry", "2", "--max-time", str(DOWNLOAD_TIMEOUT),
                    "-o", str(partial), url]
             if token:
                 # Put the token in a 0600 curl config instead of argv so it does
@@ -310,7 +333,7 @@ class Handler(BaseHTTPRequestHandler):
                 token_config.write_text(f'header = "Authorization: Bearer {token}"\n', encoding="utf-8")
                 os.chmod(token_config, 0o600)
                 cmd = [
-                    "curl", "-fSL", "--retry", "2", "--max-time", str(DOWNLOAD_TIMEOUT),
+                    "curl", "-fSL", "--proto", "=http,https", "--retry", "2", "--max-time", str(DOWNLOAD_TIMEOUT),
                     "--config", str(token_config), "-o", str(partial), url,
                 ]
             proc = subprocess.Popen(

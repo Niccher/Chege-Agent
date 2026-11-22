@@ -37,11 +37,18 @@ class LoopGuard:
         fp = self.compute_fingerprint(tool_name, args)
         self.history.append(fp)
         self.call_counts[fp] = self.call_counts.get(fp, 0) + 1
-        count = self.call_counts[fp]
 
-        if count >= self.stall_threshold:
+        # Count consecutive identical calls from history
+        consecutive_count = 0
+        for past_fp in reversed(self.history):
+            if past_fp == fp:
+                consecutive_count += 1
+            else:
+                break
+
+        if consecutive_count >= self.stall_threshold:
             raise StalledExecutionError(
-                f"LoopGuard detected {count} identical calls to '{tool_name}' with the same arguments. Execution halted."
+                f"LoopGuard detected {consecutive_count} identical calls to '{tool_name}' with the same arguments. Execution halted."
             )
 
         # Detect ping-pong cycle: A, B, A, B, A, B
@@ -52,9 +59,9 @@ class LoopGuard:
                     "LoopGuard detected an alternating cycle (ping-pong loop between two operations). Execution halted."
                 )
 
-        if count == self.warning_threshold:
+        if consecutive_count == self.warning_threshold:
             return (
-                f"SYSTEM WARNING: You have invoked '{tool_name}' with identical arguments {count} times consecutively. "
+                f"SYSTEM WARNING: You have invoked '{tool_name}' with identical arguments {consecutive_count} times consecutively. "
                 f"The result will not change. You MUST adopt a different approach or inspect the files to proceed."
             )
 

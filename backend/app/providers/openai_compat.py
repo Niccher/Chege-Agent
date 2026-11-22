@@ -24,10 +24,14 @@ class OpenAICompatProvider(Provider):
         base_url: str = "https://api.openai.com/v1",
         api_key: str | None = None,
         timeout: float = 120.0,
+        provider_id: str = "openai_compat",
+        max_tokens: int | None = None,
     ):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or "").rstrip("/")
         self.api_key = api_key or "none"
         self.timeout = float(timeout or 120.0)
+        self.provider_id = provider_id
+        self.max_tokens = max_tokens
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -49,7 +53,7 @@ class OpenAICompatProvider(Provider):
                         ModelInfo(
                             id=mid,
                             name=mid,
-                            provider="openai_compat",
+                            provider=self.provider_id,
                             context_length=16384,
                             supports_tools=True,
                         )
@@ -85,6 +89,8 @@ class OpenAICompatProvider(Provider):
 
         if tools:
             payload["tools"] = tools
+        if self.max_tokens:
+            payload["max_tokens"] = int(self.max_tokens)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             async with client.stream(

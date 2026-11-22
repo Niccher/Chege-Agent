@@ -38,7 +38,7 @@ The canonical local URL is `http://127.0.0.1:8001/`; a normal isolated deploy bi
 ### Symptom:
 The isolated deploy fails with:
 ```text
-Error response from daemon: driver failed programming external connectivity on endpoint chege-local-agent: Bind for 127.0.0.1:8001 failed: port is already allocated
+Error response from daemon: driver failed programming external connectivity on endpoint chege-agent-local-web: Bind for 127.0.0.1:8001 failed: port is already allocated
 ```
 
 ### Solution:
@@ -47,7 +47,7 @@ Find what is already using 8001 and free it if possible:
 sudo lsof -i :8001
 ```
 
-Redeploy with the canonical command (it recreates only `chege-local-agent` and leaves other containers untouched):
+Redeploy with the canonical command (it recreates only `chege-agent-local-web` and leaves other containers untouched):
 ```bash
 bash scripts/deploy.sh --isolated
 ```
@@ -61,7 +61,7 @@ If 8001 must stay occupied by another app, set a different `CHEGE_PORT` in `.env
 ### Symptom:
 Logs from `docker-socket-proxy` show:
 ```text
-chege-docker-proxy | Permission denied: /var/run/docker.sock
+chege-agent-docker-proxy | Permission denied: /var/run/docker.sock
 ```
 
 ### Solution:
@@ -69,10 +69,10 @@ Ensure the host user is in the `docker` group and the daemon is active. Do **not
 
 ```bash
 sudo usermod -aG docker $USER   # log out and back in
-bash scripts/deploy.sh logs chege-local-proxy
+bash scripts/deploy.sh logs chege-agent-local-docker-proxy
 ```
 
-If the proxy is reachable but runs fail with a sandbox error, rebuild the sandbox image with `bash scripts/deploy.sh --isolated` or inspect `bash scripts/deploy.sh logs chege-local-agent`.
+If the proxy is reachable but runs fail with a sandbox error, rebuild the sandbox image with `bash scripts/deploy.sh --isolated` or inspect `bash scripts/deploy.sh logs chege-agent-local-web`.
 
 ---
 
